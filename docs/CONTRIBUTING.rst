@@ -122,7 +122,7 @@ Some key takeaways:
 - File headers are mandatory.
 - Lines should not exceed 80 characters.
 - When splitting up a line onto multiple lines, each additional level should be
-  indented twice (except for documentation).
+  indented once (except for documentation).
 - Arguments are split up if they span more than a line. If all of the arguments
   fit on the next line, put them on the next line. If they do not all fit on the
   next line, put each argument on a separate line.
