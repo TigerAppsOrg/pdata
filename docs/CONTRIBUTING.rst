@@ -7,7 +7,7 @@ Repository Guidelines
 Git's entire goal is to keep a working record of all changes to the code.
 Developers should strive to keep this record clean and easy to understand.
 
-1. Commit messages should be descriptive and contain both a title and body
+#. Commit messages should be descriptive and contain both a title and body
    unless the content of the commit is very minimal. Avoid using
    :code:`$ git commit -m`. Instead, use :code:`$ git commit` to write a
    succinct and detailed message. For example,
@@ -19,7 +19,29 @@ Developers should strive to keep this record clean and easy to understand.
       The bug was caused because in Python 3.x, filter() and map() return
       iterators (i.e. filter/map objects) instead of the evaluated list.
 
-2. Follow the `Git Branching Workflow <https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows>`_.
+#. Try to commit small changes frequently. For example, do not have
+   "batch" commits where you introduce multiple new features or bug fixes at
+   once. Each commit should be focused on a specific feature, bug fix, or
+   concept. You should *never* use :code:`$ git commit -a`; review all files
+   being added to ensure that each commit is coherent. This can be done using
+   :code:`git status` and :code:`git add {set of files}`.
+
+#. Do not add derived/generated files (i.e. compilation results, be those from
+   JSX, SCSS, or any other language) to the repository. In general, only commit
+   source code; anything that results from a build tool should not be committed.
+   Generated files can be regenerated as needed. However, certain auto-generated
+   files (such as Django's migrations) *should* be committed if they are
+   considered source. On a similar note, static assets (such as minified JS
+   libraries or images) are not to be included in a repository.
+
+#. Do not add confidential or secure data to the repository, including API keys.
+   Git maintains an entire history of the repository, and so removing such data
+   requires rewriting the repository history, which is tedious and invalidates
+   all other clones. Instead, data such as API keys should be consumed by the
+   project in the form of environment variables.
+
+#. Follow the
+   `Git Branching Workflow <https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows>`_.
    The :code:`master` branch is reserved for production-ready code; any code
    ready to be tested should be merged into :code:`dev` branch. :code:`dev` is
    pushed to the staging server and :code:`master` is pushed to the production
@@ -29,29 +51,18 @@ Developers should strive to keep this record clean and easy to understand.
    the other hand, would be prefixed with :code:`bugfix` (such as
    :code:`bugfix-17`, referring to an issue 17).
 
-3. Try to commit small changes frequently. For example, do not have
-   "batch" commits where you introduce multiple new features or bug fixes at
-   once. Each commit should be focused on a specific feature, bug fix, or
-   concept. You should *never* use :code:`$ git commit -a`; review all files
-   being added to ensure that each commit is coherent. This can be done using
-   :code:`git status` and :code:`git add {set of files}`.
+   A good tutorial for the branching workflow is presented on
+   `GitHub <https://guides.github.com/introduction/flow/>`_.
 
-4. Do not force push (:code:`$ git push -f` or :code:`$ git push --force`) to
+#. Do not force push (:code:`$ git push -f` or :code:`$ git push --force`) to
    any upstream branch.
 
-5. Do not add derived/generated files (i.e. compilation results, be those from
-   JSX, SCSS, or any other language) to the repository. In general, only commit
-   source code; anything that results from a build tool should not be committed.
-   Generated files can be regenerated as needed. However, certain auto-generated
-   files (such as Django's migrations) *should* be committed if they are
-   considered source. On a similar note, static assets (such as minified JS
-   libraries or images) are not to be included in a repository.
+#. Use GitHub issues to track feature requests and bugs. Create issues for any
+   new bugs introduced (hopefully none) or found. Make sure to label issues
+   appropriately and assign someone to them if they are urgent.
 
-6. Do not add confidential or secure data to the repository, including API keys.
-   Git maintains an entire history of the repository, and so removing such data
-   requires rewriting the repository history, which is tedious and invalidates
-   all other clones. Instead, data such as API keys should be consumed by the
-   project in the form of environment variables.
+   Check out the `GitHub Issues documentation <https://guides.github.com/features/issues/>`_
+   for more information.
 
 Status Checks
 ^^^^^^^^^^^^^
