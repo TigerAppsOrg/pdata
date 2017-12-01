@@ -1,5 +1,5 @@
-Contribution Guide
-==================
+Contribution Guidelines
+=======================
 
 Repository Guidelines
 ---------------------
@@ -97,7 +97,7 @@ As a review of the repository guidelines, this is the expected workflow:
   $ git merge dev-docs
   $ git push
 
-:note: 
+:note:
   It is vital that you do **not** commit to :code:`master` directly.
   If you do, a push to :code:`master` will be rejected and you will need to
   reset your master branch to the prior commit.
