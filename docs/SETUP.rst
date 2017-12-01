@@ -4,27 +4,32 @@ Project Setup
 Quick Start
 -----------
 
-This project uses Python 3.6. Before proceeding, make sure to
-`install it <https://www.python.org/downloads/>`_ and have it set as your
-default Python version (recommended that you use a Python version manager like
+**Prerequisites**: This project uses `Python 3.6 <https://www.python.org/downloads/>`_
+and `pipenv <https://docs.pipenv.org/>`_. Before proceeding, make sure to
+install these and have Python 3.6 set as your default Python version
+(recommended that you use a Python version manager like
 `pyenv <https://github.com/pyenv/pyenv>`_).
 
-To set up your development environment, you can run the automated setup script
-:code:`configure.sh` in the root of the repository:
+To set up your development environment, install the Python dependencies from
+pipenv:
 
 .. code:: bash
 
-  $ ./configure.sh
+  $ pipenv install
 
-This will install all Python dependencies you need for the project. You can also rerun this script upon pulling changes to install new dependencies
-if more become required.
+This installs dependencies to a virtual environment. To use them, activate the
+virtual environment each time you want to work on the project:
+
+.. code:: bash
+
+  $ pipenv shell
 
 
 Dependencies
 ------------
 
 Below we list the Python dependencies required for the project (note that
-these are automatically installed by the :code:`configure.sh` script).
+these are automatically installed by pipenv).
 
 - Django (1.11)
 - Django REST Framework
