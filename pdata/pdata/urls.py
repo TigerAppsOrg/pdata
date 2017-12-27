@@ -1,8 +1,8 @@
 # pdata/pdata/urls.py
 # pdata
 # Author: Michael Friedman
-# Description: Django root URL configuration.
 # Date: December 1st, 2017
+# Description: Django root URL configuration.
 
 from django.conf.urls import url
 from django.contrib import admin

@@ -1,8 +1,8 @@
 # pdata/pdata/wsgi.py
 # pdata
 # Author: Michael Friedman
-# Description: WSGI Configuration
 # Date: December 1st, 2017
+# Description: WSGI Configuration
 
 import os
 

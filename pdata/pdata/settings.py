@@ -1,8 +1,8 @@
 # pdata/pdata/settings.py
 # pdata
 # Author: Michael Friedman
-# Description: Django settings.
 # Date: December 1st, 2017
+# Description: Django settings.
 
 import os
 
