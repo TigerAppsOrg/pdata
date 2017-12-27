@@ -1,3 +1,9 @@
+# pdata/manage.py
+# pdata
+# Author: Michael Friedman
+# Description: Django management utilities.
+# Date: December 1st, 2017
+
 #!/usr/bin/env python
 import os
 import sys

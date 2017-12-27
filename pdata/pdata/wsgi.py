@@ -1,16 +1,12 @@
-"""
-WSGI config for pdata project.
-
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/1.11/howto/deployment/wsgi/
-"""
+# pdata/pdata/wsgi.py
+# pdata
+# Author: Michael Friedman
+# Description: WSGI Configuration
+# Date: December 1st, 2017
 
 import os
 
 from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pdata.settings")
-
 application = get_wsgi_application()
