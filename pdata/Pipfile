@@ -9,6 +9,7 @@ name = "pypi"
 
 django = "==1.11"
 djangorestframework = "*"
+dj-database-url = "*"
 
 
 [dev-packages]
