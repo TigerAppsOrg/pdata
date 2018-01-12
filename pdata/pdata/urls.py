@@ -4,9 +4,7 @@
 # Date: December 1st, 2017
 # Description: Django root URL configuration.
 
-from django.conf.urls import url
-from django.contrib import admin
+from django.conf.urls import url, include
 
 urlpatterns = [
-  url(r'^admin/', admin.site.urls),
 ]
