@@ -13,18 +13,20 @@ class Course(models.Model):
   '''
   title = models.CharField(max_length=255)
   description = models.TextField()
-  registrar_id = models.PositiveIntegerField()
+  registrar_id = models.PositiveIntegerField(unique=True)
   distribution_area = models.CharField(max_length=3, db_index=True, null=True)
 
   department = models.CharField(max_length=3, db_index=True)
   number = models.PositiveSmallIntegerField(db_index=True)
+  #: A letter is sometimes appended to course numbers (i.e. ENV 200A, ENV200B,
+  #: etc.).
   letter = models.CharField(max_length=1, default="")
 
-  pdf_allowed = models.BooleanField(default=True)
-  audit_allowed = models.BooleanField(default=True)
+  pdf_allowed = models.BooleanField(default=True, db_index=True)
+  audit_allowed = models.BooleanField(default=True, db_index=True)
 
   class Meta:
-    unique_together = ('department', 'number')
+    unique_together = ('department', 'number', 'letter')
 
 class Semester(models.Model):
   '''
@@ -40,6 +42,9 @@ class Semester(models.Model):
 
   year = models.PositiveSmallIntegerField(db_index=True)
 
+  class Meta:
+    unique_together = ('term', 'year')
+
 class Instructor(models.Model):
   '''
   The `Instructor` model represents a single instructor. An instructor may
@@ -47,8 +52,12 @@ class Instructor(models.Model):
   '''
   first_name = models.CharField(max_length=255)
   last_name = models.CharField(max_length=255)
+
+  #: A full_name is presented in the Registrar data, which means that it may
+  #: be possible that the `first_name last_name` does not equal to the
+  #: full_name. If they are equal, however, the value will be null.
   full_name = models.CharField(max_length=255, null=True)
-  employee_id = models.CharField(max_length=9, db_index=True)
+  employee_id = models.CharField(max_length=9, unique=True, db_index=True)
 
 class CourseOffering(models.Model):
   '''
@@ -56,13 +65,13 @@ class CourseOffering(models.Model):
   course. For example, there are unique offering of some courses per semester,
   and others which are only taught in a single semester.
   '''
-  registrar_guid = models.PositiveIntegerField(db_index=True)
+  registrar_guid = models.PositiveIntegerField(unique=True, db_index=True)
   course = models.ForeignKey(Course, on_delete=models.CASCADE)
   semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
   instructor = models.ManyToManyField(Instructor)
 
-  start_date = models.DateTimeField()
-  end_date = models.DateTimeField()
+  start_date = models.DateField()
+  end_date = models.DateField()
 
 class CrossListing(models.Model):
   '''
@@ -75,3 +84,6 @@ class CrossListing(models.Model):
   department = models.CharField(max_length=3, db_index=True)
   number = models.PositiveSmallIntegerField(db_index=True)
   letter = models.CharField(max_length=1, default="")
+
+  class Meta:
+    unique_together = ('course', 'department', 'number', 'letter')
