@@ -5,6 +5,7 @@
 # Description: Courses dataset models.
 
 from django.db import models
+from django.core.validators import MaxValueValidator
 
 class Course(models.Model):
   '''
@@ -13,20 +14,41 @@ class Course(models.Model):
   '''
   title = models.CharField(max_length=255)
   description = models.TextField()
-  registrar_id = models.PositiveIntegerField(unique=True)
-  distribution_area = models.CharField(max_length=3, db_index=True, null=True)
 
+  distribution_area = models.CharField(max_length=3, db_index=True, null=True)
   department = models.CharField(max_length=3, db_index=True)
   number = models.PositiveSmallIntegerField(db_index=True)
   #: A letter is sometimes appended to course numbers (i.e. ENV 200A, ENV200B,
   #: etc.).
   letter = models.CharField(max_length=1, default="")
 
+  TRACK_UNDERGRAD = 1
+  TRACK_GRAD = 2
+  track = models.PositiveSmallIntegerField(choices=(
+    (TRACK_UNDERGRAD, 'Undergraduate'),
+    (TRACK_GRAD, 'Graduate')
+    ))
+
   pdf_allowed = models.BooleanField(default=True, db_index=True)
   audit_allowed = models.BooleanField(default=True, db_index=True)
 
   class Meta:
     unique_together = ('department', 'number', 'letter')
+
+class CrossListing(models.Model):
+  '''
+  The `CrossListing` model represents each of the different
+  (department, number) pairs that a course is listed under. For example,
+  COS 342 is cross-listed as MAT 375.
+  '''
+  course = models.ForeignKey(Course, on_delete=models.CASCADE)
+
+  department = models.CharField(max_length=3, db_index=True)
+  number = models.PositiveSmallIntegerField(db_index=True)
+  letter = models.CharField(max_length=1, default="")
+
+  class Meta:
+    unique_together = ('course', 'department', 'number', 'letter')
 
 class Semester(models.Model):
   '''
@@ -39,8 +61,10 @@ class Semester(models.Model):
     (TERM_FALL, 'Fall'),
     (TERM_SPRING, 'Spring')
     ), db_index=True)
-
   year = models.PositiveSmallIntegerField(db_index=True)
+
+  #: Registrar-assigned term ID.
+  term_id = models.PositiveIntegerField(unique=True)
 
   class Meta:
     unique_together = ('term', 'year')
@@ -57,33 +81,108 @@ class Instructor(models.Model):
   #: be possible that the `first_name last_name` does not equal to the
   #: full_name. If they are equal, however, the value will be null.
   full_name = models.CharField(max_length=255, null=True)
+
+  #: Provided by the Registrar with instructor listings.
   employee_id = models.CharField(max_length=9, unique=True, db_index=True)
 
-class CourseOffering(models.Model):
+class Offering(models.Model):
   '''
-  The `CourseOffering` model represents all of the offerings of a single
+  The `Offering` model represents all of the offerings of a single
   course. For example, there are unique offering of some courses per semester,
   and others which are only taught in a single semester.
   '''
+  #: The GUID is always unique, because it is the concatenation of the
+  #: semester's term_id and a per-semester, unique course_id.
   registrar_guid = models.PositiveIntegerField(unique=True, db_index=True)
+
   course = models.ForeignKey(Course, on_delete=models.CASCADE)
   semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+
+  #: An instructor can teach many different offerings, and a single offering
+  #: can be taught by multiple instructors.
   instructor = models.ManyToManyField(Instructor)
 
   start_date = models.DateField()
   end_date = models.DateField()
 
-class CrossListing(models.Model):
-  '''
-  The `CrossListing` model represents each of the different
-  (department, number) pairs that a course is listed under. For example,
-  COS 342 is cross-listed as MAT 375.
-  '''
-  course = models.ForeignKey(Course, on_delete=models.CASCADE)
+  class Meta:
+    unique_together = ('course', 'semester')
 
-  department = models.CharField(max_length=3, db_index=True)
-  number = models.PositiveSmallIntegerField(db_index=True)
-  letter = models.CharField(max_length=1, default="")
+class Section(models.Model):
+  '''
+  The `Section` model represents a single class for a course. For example,
+  an offered course will have multiple classes, as lectures or precepts.
+  '''
+  offering = models.ForeignKey(Offering, on_delete=models.CASCADE)
+
+  #: Per-offering unique number assigned to each meeting.
+  number = models.PositiveIntegerField()
+
+  #: Per-offering unique number assigned to each meeting.
+  section_id = models.CharField(max_length=3)
+
+  start_date = models.DateField()
+  end_date = models.DateField()
+
+  #: Status of the section.
+  STATUS_OPEN = 1
+  STATUS_CLOSED = 2
+  STATUS_CANCELLED = 3
+  status = models.PositiveSmallIntegerField(choices=(
+    (STATUS_OPEN, 'Open'),
+    (STATUS_CLOSED, 'Closed'),
+    (STATUS_CANCELLED, 'Cancelled'),
+    ))
+
+  capacity = models.PositiveIntegerField()
+
+  #: The enrollment should always be, at most, the capacity.
+  enrollment = models.PositiveIntegerField()
 
   class Meta:
-    unique_together = ('course', 'department', 'number', 'letter')
+    unique_together = ('offering', 'section_id')
+
+class Building(models.Model):
+  '''
+  The `Building` model represents a building along with the registrar-provided
+  information for that building.
+  '''
+  code = models.CharField(max_length=10, unique=True)
+  location_code = models.PositiveSmallIntegerField(unique=True)
+
+  name = models.CharField(max_length=255)
+  short_name = models.CharField(max_length=100)
+
+class Location(models.Model):
+  '''
+  The `Location` model represents a building and room in a course.
+  '''
+  building = models.ForeignKey(Building, on_delete=models.CASCADE)
+  room = models.CharField(max_length=10)
+
+  class Meta:
+    unique_together = ('building', 'room')
+
+class Meeting(models.Model):
+  '''
+  The `Meeting` model is for a single, well, meeting of a section.
+
+  Generally, there is a one-to-one mapping between sections and meetings.
+  However, it is possible for a single class (such as a lecture) to have
+  multiple meeting times.
+  '''
+  section = models.ForeignKey(Section, on_delete=models.CASCADE)
+  location = models.ForeignKey(Location, on_delete=models.CASCADE)
+
+  #: Per-section unique number.
+  number = models.PositiveSmallIntegerField()
+
+  start_time = models.TimeField()
+  end_time = models.TimeField()
+
+  #: A bitstring where 1 represents a day that this class meets and where 0
+  #: represents a day that the class does not meet.
+  days = models.PositiveSmallIntegerField(validators=[MaxValueValidator(1<<7)])
+
+  class Meta:
+    unique_together = ('section', 'number')
