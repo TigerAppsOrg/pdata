@@ -63,6 +63,9 @@ class Semester(models.Model):
     ), db_index=True)
   year = models.PositiveSmallIntegerField(db_index=True)
 
+  start_date = models.DateField()
+  end_date = models.DateField()
+
   #: Registrar-assigned term ID.
   term_id = models.PositiveIntegerField(unique=True)
 
@@ -121,9 +124,6 @@ class Section(models.Model):
   #: Per-offering unique number assigned to each meeting.
   section_id = models.CharField(max_length=3)
 
-  start_date = models.DateField()
-  end_date = models.DateField()
-
   #: Status of the section.
   STATUS_OPEN = 1
   STATUS_CLOSED = 2
@@ -180,9 +180,23 @@ class Meeting(models.Model):
   start_time = models.TimeField()
   end_time = models.TimeField()
 
-  #: A bitstring where 1 represents a day that this class meets and where 0
-  #: represents a day that the class does not meet.
-  days = models.PositiveSmallIntegerField(validators=[MaxValueValidator(1<<7)])
+  #: Days of the week where 0 is Sunday, 1 is Monday, and so forth.
+  DAY_SUNDAY = 0
+  DAY_MONDAY = 1
+  DAY_TUESDAY = 2
+  DAY_WEDNESDAY = 3
+  DAY_THURSDAY = 4
+  DAY_FRIDAY = 5
+  DAY_SATURDAY = 6
+  day = models.PositiveSmallIntegerField(choices=(
+    (DAY_SUNDAY, 'Sunday'),
+    (DAY_MONDAY, 'Monday'),
+    (DAY_TUESDAY, 'Tuesday'),
+    (DAY_WEDNESDAY, 'Wednesday'),
+    (DAY_THURSDAY, 'Thursday'),
+    (DAY_FRIDAY, 'Friday'),
+    (DAY_SATURDAY, 'Saturday'),
+    ))
 
   class Meta:
     unique_together = ('section', 'number')
