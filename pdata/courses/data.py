@@ -11,7 +11,7 @@ import logging
 import urllib.request
 import json
 
-from pdata.utils import bulk_upsert_item
+from pdata.utils import bulk_upsert
 from . import models
 
 BASE_URL = 'https://etcweb.princeton.edu/webfeeds/courseofferings/?term={term}&subject=all&fmt=json'
@@ -36,6 +36,7 @@ def fetch_term_data(term: typing.Union[str, int] = 'current')
     data = req.read()
     return json.parse(data)
 
+@transaction.atomic
 def update_term_data(data: dict) -> None:
   '''
   Update a term's data, if present, with new information. If not present, the
@@ -80,32 +81,31 @@ def _update_subject_data(data: dict) -> None:
   :param data: subject data
   '''
   dept = data['code']
-  created_courses = []
 
+  expected = []
   for course_info in data['courses']:
     num_tuple = _catalog_num_to_tuple(course_info['catalog_number'])
 
-    course, created = bulk_upsert_item(
-      models.Course,
-      department=dept,
-      number=num_tuple[0],
-      letter=num_tuple[1],
-      defaults={
-        'track': (models.Course.TRACK_UNDERGRAD
+    expected.append({
+      'department': dept,
+      'number': num_tuple[0],
+      'letter': num_tuple[1],
+      'track': (models.Course.TRACK_UNDERGRAD
           if course_info['detail']['track'] == 'UGRAD'
           else models.Course.TRACK_GRAD),
-        'title': course_info['title'],
-        'description': course_info['detail']['description'],
-        # TODO: these are not provided by the webfeed...
-        'distribution_area': '',
-        'pdf_allowed': False,
-        'audit_allowed': False,
-        })
+      'title': course_info['title'],
+      'description': course_info['detail']['description'],
+      # TODO: these are not provided by the webfeed...
+      'distribution_area': '',
+      'pdf_allowed': False,
+      'audit_allowed': False,
+      })
 
-    if created:
-      created_courses.append(course)
+  bulk_upsert(
+    models.Course.objects.filter(department=dept),
+    lambda d: hash('%s%d%s' % (d['department'], d['number'], d['letter'])),
+    expected)
 
-  models.Course.objects.bulk_create(created_courses)
   _update_subject_crosslistings(data)
 
 def _update_subject_crosslistings(data: dict) -> None:
@@ -116,7 +116,7 @@ def _update_subject_crosslistings(data: dict) -> None:
   '''
   dept = data['code']
   pk_map = _get_course_pk_map(department=dept)
-  created_crosslistings = []
+  expected = []
 
   for course_info in data['courses']:
     course_pk = pk_map[course_info['catalog_number']]
@@ -124,18 +124,19 @@ def _update_subject_crosslistings(data: dict) -> None:
     for crosslisting_info in course_info['crosslistings']:
       num_tuple = _catalog_num_to_tuple(crosslisting_info['catalog_number'])
 
-      cl, created = bulk_upsert_item(
-        models.CrossListing,
-        department=crosslisting_info['subject'],
-        number=num_tuple[0],
-        letter=num_tuple[1],
-        course=pk,
-        )
+      expected.append({
+        'department': crosslisting_info['subject'],
+        'number': num_tuple[0],
+        'letter': num_tuple[1],
+        'course_id': course_pk,
+        })
 
-      if created:
-        created_crosslistings.append(cl)
-
-  models.CrossListing.objects.bulk_create(created_crosslistings)
+  bulk_upsert(
+    models.CrossListing.objects.all(),
+    lambda d: hash('%s%d%s-%d' % (
+      d['department'], d['number'], d['letter'], d['course_id'])),
+    expected
+    )
 
 def _catalog_num_to_tuple(catalog_number: str) -> typing.Tuple[int, str]:
   '''
