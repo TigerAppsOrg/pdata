@@ -56,9 +56,23 @@ def update_term_data(data: dict) -> None:
       })
 
   for subject_info in term_info['subjects']:
-    _update_subject_data(subject_info, term)
+    _update_subject_data(subject_info)
 
-def _update_subject_data(data: dict, term: models.Semester) -> None:
+def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
+  '''
+  Get a map between course catalog numbers and their primary keys. kwargs can
+  be used to pass in a filter to the query.
+
+  :param kwargs: filter parameters for query
+
+  :return: map of catalog numbers to primary keys
+  '''
+  courses = (models.Course.objects
+    .filter(**kwargs)
+    .values_list('number', 'letter', 'id'))
+  return {('%d%s' % (num, ltr)): pk for (num, ltr, pk) in courses}
+
+def _update_subject_data(data: dict) -> None:
   '''
   Update a subject's data, if present, with new information. If not present,
   the relevant objects in the database are created.
@@ -66,7 +80,6 @@ def _update_subject_data(data: dict, term: models.Semester) -> None:
   :param data: subject data
   '''
   dept = data['code']
-
   created_courses = []
 
   for course_info in data['courses']:
@@ -92,7 +105,37 @@ def _update_subject_data(data: dict, term: models.Semester) -> None:
     if created:
       created_courses.append(course)
 
-  models.Course.bulk_create(created_courses)
+  models.Course.objects.bulk_create(created_courses)
+  _update_subject_crosslistings(data)
+
+def _update_subject_crosslistings(data: dict) -> None:
+  '''
+  Update a subject's crosslistings for all of its courses.
+
+  :param data: subject data
+  '''
+  dept = data['code']
+  pk_map = _get_course_pk_map(department=dept)
+  created_crosslistings = []
+
+  for course_info in data['courses']:
+    course_pk = pk_map[course_info['catalog_number']]
+
+    for crosslisting_info in course_info['crosslistings']:
+      num_tuple = _catalog_num_to_tuple(crosslisting_info['catalog_number'])
+
+      cl, created = bulk_upsert_item(
+        models.CrossListing,
+        department=crosslisting_info['subject'],
+        number=num_tuple[0],
+        letter=num_tuple[1],
+        course=pk,
+        )
+
+      if created:
+        created_crosslistings.append(cl)
+
+  models.CrossListing.objects.bulk_create(created_crosslistings)
 
 def _catalog_num_to_tuple(catalog_number: str) -> typing.Tuple[int, str]:
   '''
