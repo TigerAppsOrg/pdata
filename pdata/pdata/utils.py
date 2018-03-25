@@ -10,6 +10,7 @@ import sys
 
 from django.utils.module_loading import import_string
 from django.db import models
+from django.db import transaction
 
 import pdata.data
 
@@ -38,42 +39,66 @@ def load_celery_tasks(sources: typing.List[str]) -> dict:
 
   return tasks
 
-def bulk_upsert_item(
-  t: typing.Type[models.Model],
-  defaults: typing.Optional[dict] = None,
-  **kwargs) -> typing.Tuple[models.Model, bool]:
+@transaction.atomic
+def bulk_upsert(
+  q: typing.Type[models.query.QuerySet],
+  hash_data: typing.Callable[[typing.Dict[str, typing.Any]], int],
+  expected: typing.Set[typing.Dict[str, typing.Any]],
+  delete: bool = False,
+  ) -> typing.Dict[str, typing.Set[str]]:
   '''
-  Allow for bulk upserts when an object is created. In particular, it acts just
-  like `obj.update_or_create(defaults=defaults, **kwargs)` but instead of
-  saving the object on creation, it is simply instantiated. The object can then
-  be saved to the database using `bulk_create(obj...)`.
+  Atomically bulk upsert objects. The queryset `q` is used to retrieve the
+  existing objects, and `expected` is a list of dictionarys (mapping field
+  names to values). One query is performed to find existing objects, and then
+  the updates are performed individually while inserts/deletes are performed
+  in bulk. The performance improvements come from the bulk insertions and
+  single filter query.
 
-  :param t: type of model
-  :param defaults: default values to insert
-  :param kwargs: filter kwargs
+  For N existing objects (to update) and M objects to create, this performs
+  N+2 database queries. In comparison, Django's `update_or_create` performs
+  2(N+M) queries.
 
-  :return: tuple of object and boolean flag if created or not
+  :param q: queryset to retrieve existing objects
+  :param hash_data: hash a dictionary representation of an object to a unique
+    value (this will generally be some unique value in the object itself)
+  :param expected: set of expected objects (represented as dictionaries) to
+    upsert
+
+  :return: set of unique values for each of: created, updated
   '''
-  # See: https://docs.djangoproject.com/en/2.0/ref/models/querysets/#get-or-create
-  params = {k: v for k, v in kwargs.items() if '__' not in k}
-  params.update({k: v() if callable(v) else v for k, v in defaults.items()})
+  model_t = q.model
 
-  created = False
-  try:
-    obj = t.objects.get(**kwargs)
-  except t.DoesNotExist:
-    obj = t(**params)
-    # Newly-created object is *not* saved so it can be bulk-created later on.
-    created = True
-  else:
-    # Update all the fields to the new values
-    dirty = False
-    for k, v in params.items():
-      if getattr(obj, k) != v:
-        setattr(obj, k, v)
-        dirty = True
-    if dirty:
-      obj.save()
+  obj_map = {} # Maps hashes to objects
+  dict_map = {} # Maps hashes to dicts, each corresponding to an object.
 
-  return (obj, created)
+  for obj, d in zip(q, q.values()):
+    h = hash_data(d)
+    obj_map[h] = obj
+    dict_map[h] = d
 
+  existing_hashes = frozenset(dict_map.keys())
+
+  # Add in the expected values.
+  expected_map = {hash_data(d): d for d in expected}
+  expected_hashes = frozenset(expected_map.keys())
+  dict_map.update(expected_map)
+
+  # Operations to perform, and objects on which to perform them.
+  to_update = expected_hashes & existing_hashes
+  to_create = expected_hashes - existing_hashes
+
+  # Update each object individually.
+  for o in to_update:
+    obj = obj_map[o]
+    for k, v in dict_map[o].items():
+      setattr(obj, k, v)
+    obj.save()
+
+  # Bulk insert newly-created objects.
+  model_t.objects.bulk_create(
+    map(lambda o: model_t(**dict_map[o]), to_create))
+
+  return {
+    'created': to_create,
+    'updated': to_update,
+    }
