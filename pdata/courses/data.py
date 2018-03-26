@@ -40,7 +40,7 @@ def fetch_term_data(term: typing.Union[str, int] = 'current')
 def update_term_data(data: dict) -> None:
   '''
   Update a term's data, if present, with new information. If not present, the
-  data is created.
+  data is created. This is performed atomically.
 
   :param data: term data retrieved from webfeeds
   '''
@@ -50,16 +50,16 @@ def update_term_data(data: dict) -> None:
   #   1. Update the term information. This is independent of any other objects.
   #   2. Update all of the instructors. Instructors do not depend on any other
   #      objects, but offerings depend on instructors.
-  #   3. For each subject (department), update all of the courses. These
-  #      courses do not depend on anything.
-  #      a. Update individual course data.
-  #      b. Update all of the crosslistings for each course. This is done
-  #         *per-department*, not *per-course*. In other words, due to the
-  #         bulk-updating of courses, all courses must be updated before any
-  #         of the crosslistings can be updated.
-  #      c. Update all of the offerings for each course. Similar to the above,
-  #         the offerings are updated *per-department* and not *per-course*.
-  #         The instructor-to-offering mapping is also performed here.
+  #   3. Update all of the courses. Courses do not depend on any other object.
+  #      The updates are done in-bulk for all departments (at once). This is
+  #      done at the same time as the above.
+  #   4. Update all of the crosslistings for each course. This is done
+  #      all at once, not *per-course*. In other words, due to the
+  #      bulk-updating of courses, all courses must be updated before any
+  #      of the crosslistings can be updated.
+  #   5. Update all of the offerings for each course. Similar to the above,
+  #      the offerings are updated all at once and not *per-course*. The
+  #      instructor-to-offering mapping is also performed here.
 
   term_info = data['term']
 
@@ -74,19 +74,14 @@ def update_term_data(data: dict) -> None:
       'end_date': term_info['end_date']
       })
 
-  # 2.
-  _update_instructors(term_info['subjects'])
+  # 2. and 3.
+  _update_instructors_and_courses(term_info['subjects'])
 
-  # 3.
-  for subject_info in term_info['subjects']:
-    # 3.a.
-    _update_subject_data(subject_info)
+  # 4.
+  _update_subject_crosslistings(term_info['subjects'])
 
-    # 3.b.
-    _update_subject_crosslistings(data)
-
-    # 3.c.
-    _update_subject_offerings(data, term)
+  # 5.
+  _update_subject_offerings(term_info['subjects'], term)
 
 def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
   '''
@@ -102,92 +97,84 @@ def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
     .values_list('number', 'letter', 'id'))
   return {('%d%s' % (num, ltr)): pk for (num, ltr, pk) in courses}
 
-def _update_instructors(all_subject_data: typing.List[dict]) -> None:
+def _update_instructors_and_courses(subject_data: typing.List[dict]) -> None:
   '''
-  Update the instructor listing.
+  Update all of the instructors and courses, for all departments.
 
-  :param data: term's subject data
+  :param subject_data: all subject data
   '''
   expected_emplid = set()
-  expected = []
+  expected_employees = []
+  expected_courses = []
 
-  for subject_info in all_subject_data:
+  for subject_info in subject_data:
+    dept = subject_info['code']
+
     for course_info in subject_info['courses']:
-      for instructor_info in course_info[instructors]:
-        if instructor_info['emplid'] not in expected_emplid:
-          expected_emplid.add(instructor_info['emplid'])
-          full = '%s %s' % (instructor['first_name'], instructor['last_name'])
+      num_tuple = _catalog_num_to_tuple(course_info['catalog_number'])
+      expected_courses.append({
+        'department': dept,
+        'number': num_tuple[0],
+        'letter': num_tuple[1],
+        'track': (models.Course.TRACK_UNDERGRAD
+            if course_info['detail']['track'] == 'UGRAD'
+            else models.Course.TRACK_GRAD),
+        'title': course_info['title'],
+        'description': course_info['detail']['description'],
+        # TODO: these are not provided by the webfeed...
+        'distribution_area': '',
+        'pdf_allowed': False,
+        'audit_allowed': False,
+        })
 
-          expected.append({
+      for instructor_info in course_info['instructors']:
+        if instructor_info['emplid'] not in expected_emplid:
+          full_name = '%s %s' % (instructor['first_name'],
+            instructor['last_name'])
+          expected_employees.append({
             'employee_id': instructor['emplid'],
             'first_name': instructor['first_name'],
             'last_name': instructor['last_name'],
             'full_name': (instructor['full_name']
-              if full != instructor['full_name'] else None),
+              if full_name != instructor['full_name'] else None),
             })
+          expected_emplid.add(instructor_info['emplid'])
 
   bulk_upsert(
     models.Instructor.objects.all(),
     lambda d: hash(d['employee_id']),
-    expected,
+    expected_employees,
     )
 
-def _update_subject_data(subject_data: dict) -> None:
-  '''
-  Update a subject's data, if present, with new information. If not present,
-  the relevant objects in the database are created.
-
-  :param subject_data: subject data
-  '''
-  dept = subject_data['code']
-
-  expected_courses = []
-
-  for course_info in subject_data['courses']:
-    num_tuple = _catalog_num_to_tuple(course_info['catalog_number'])
-
-    expected_courses.append({
-      'department': dept,
-      'number': num_tuple[0],
-      'letter': num_tuple[1],
-      'track': (models.Course.TRACK_UNDERGRAD
-          if course_info['detail']['track'] == 'UGRAD'
-          else models.Course.TRACK_GRAD),
-      'title': course_info['title'],
-      'description': course_info['detail']['description'],
-      # TODO: these are not provided by the webfeed...
-      'distribution_area': '',
-      'pdf_allowed': False,
-      'audit_allowed': False,
-      })
-
   bulk_upsert(
-    models.Course.objects.filter(department=dept),
+    models.Course.objects.all(),
     lambda d: hash('%s%d%s' % (d['department'], d['number'], d['letter'])),
     expected_courses)
 
-def _update_subject_crosslistings(subject_data: dict) -> None:
+def _update_subject_crosslistings(subject_data: typing.List[dict]) -> None:
   '''
-  Update a subject's crosslistings for all of its courses.
+  Update all subjects' crosslistings for all of their courses.
 
-  :param subject_data: subject data
+  :param subject_data: all subject data
   '''
-  dept = subject_data['code']
-  pk_map = _get_course_pk_map(department=dept)
+  pk_map = _get_course_pk_map()
   expected = []
 
-  for course_info in subject_data['courses']:
-    course_pk = pk_map[course_info['catalog_number']]
+  for subject_info in subject_data:
+    dept = subject_info['code']
 
-    for crosslisting_info in course_info['crosslistings']:
-      num_tuple = _catalog_num_to_tuple(crosslisting_info['catalog_number'])
+    for course_info in subject_info['courses']:
+      course_pk = pk_map[course_info['catalog_number']]
 
-      expected.append({
-        'department': crosslisting_info['subject'],
-        'number': num_tuple[0],
-        'letter': num_tuple[1],
-        'course_id': course_pk,
-        })
+      for crosslisting_info in course_info['crosslistings']:
+        num_tuple = _catalog_num_to_tuple(crosslisting_info['catalog_number'])
+
+        expected.append({
+          'department': crosslisting_info['subject'],
+          'number': num_tuple[0],
+          'letter': num_tuple[1],
+          'course_id': course_pk,
+          })
 
   bulk_upsert(
     models.CrossListing.objects.all(),
@@ -197,36 +184,37 @@ def _update_subject_crosslistings(subject_data: dict) -> None:
     )
 
 def _update_subject_offerings(
-  subject_data: dict,
+  subject_data: typing.List[dict],
   semester: models.Semester)
   -> None:
   '''
-  Update a subject's offerings for all of the courses in that subject. This
+  Update all subjects' offerings for all of the courses in that subject. This
   includes registering the many-to-many relationship between instructors and
   offerings.
 
-  :param subject_data: subject data
+  :param subject_data: all subject data
   '''
-  dept = subject_data['code']
-  pk_map = _get_course_pk_map(department=dept)
-
+  pk_map = _get_course_pk_map()
   expected_offerings = []
 
-  for course_info in subject_data['courses']:
-    course_pk = pk_map[course_info['catalog_number']]
+  for subject_info in subject_data:
+    dept = subject_info['code']
 
-    if len(course_info['classes']):
-      # Assume that all of the start_date and end_date for each class is the
-      # same. So, choose an arbitrary class to obtain that data from.
-      arbitrary_class = course_info['classes'][0]
+    for course_info in subject_info['courses']:
+      course_pk = pk_map[course_info['catalog_number']]
 
-      expected_offerings.append({
-        'registrar_guid': course_info['guid'],
-        'course': course_pk,
-        'semester': semester,
-        'start_date': arbitrary_class['schedule']['start_date'],
-        'end_date': arbitrary_class['schedule']['end_date'],
-        })
+      if len(course_info['classes']):
+        # Assume that all of the start_date and end_date for each class is the
+        # same. So, choose an arbitrary class to obtain that data from.
+        arbitrary_class = course_info['classes'][0]
+
+        expected_offerings.append({
+          'registrar_guid': course_info['guid'],
+          'course': course_pk,
+          'semester': semester,
+          'start_date': arbitrary_class['schedule']['start_date'],
+          'end_date': arbitrary_class['schedule']['end_date'],
+          })
 
   bulk_upsert(
     models.Offering.objects.all(),
@@ -242,14 +230,16 @@ def _update_subject_offerings(
     models.Offering.objects.all().values_list('registrar_guid', 'id')}
   expected_instructor_m2m = []
 
-  for course_info in subject_data['courses']:
-    if len(course_info['classes']):
-      offering_pk = offering_pk_map[course_info['guid']]
-      for instructor_info in course_info['instructors']:
-        expected_instructor_m2m.append({
-          'instructor_id': instructor_pk_map[instructor_info['emplid']],
-          'offering_id': offering_pk,
-          })
+  for subject_info in subject_data:
+    for course_info in subject_info['courses']:
+      if len(course_info['classes']):
+        offering_pk = offering_pk_map[course_info['guid']]
+
+        for instructor_info in course_info['instructors']:
+          expected_instructor_m2m.append({
+            'instructor_id': instructor_pk_map[instructor_info['emplid']],
+            'offering_id': offering_pk,
+            })
 
   m2m_model = models.Offering.instructors.through
   bulk_upsert(

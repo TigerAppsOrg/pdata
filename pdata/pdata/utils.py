@@ -59,7 +59,8 @@ def bulk_upsert(
 
   For N existing objects (to update) and M objects to create, this performs
   N+2 database queries. In comparison, Django's `update_or_create` performs
-  2(N+M) queries.
+  2(N+M) queries. More simply, `bulk_upsert` requires O(N+2) queries where N
+  is the length of expected data set.
 
   :param q: queryset to retrieve existing objects
   :param hash_data: hash a dictionary representation of an object to a unique
