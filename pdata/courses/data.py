@@ -44,8 +44,26 @@ def update_term_data(data: dict) -> None:
 
   :param data: term data retrieved from webfeeds
   '''
+  # Updates are performed in the following order. All updates are performed
+  # in bulk, as possible.
+  # 
+  #   1. Update the term information. This is independent of any other objects.
+  #   2. Update all of the instructors. Instructors do not depend on any other
+  #      objects, but offerings depend on instructors.
+  #   3. For each subject (department), update all of the courses. These
+  #      courses do not depend on anything.
+  #      a. Update individual course data.
+  #      b. Update all of the crosslistings for each course. This is done
+  #         *per-department*, not *per-course*. In other words, due to the
+  #         bulk-updating of courses, all courses must be updated before any
+  #         of the crosslistings can be updated.
+  #      c. Update all of the offerings for each course. Similar to the above,
+  #         the offerings are updated *per-department* and not *per-course*.
+  #         The instructor-to-offering mapping is also performed here.
+
   term_info = data['term']
 
+  # 1.
   term, _ = models.Semester.objects.update_or_create(
     term_id=term_info['code'],
     defaults={
@@ -56,11 +74,18 @@ def update_term_data(data: dict) -> None:
       'end_date': term_info['end_date']
       })
 
+  # 2.
   _update_instructors(term_info['subjects'])
 
+  # 3.
   for subject_info in term_info['subjects']:
+    # 3.a.
     _update_subject_data(subject_info)
+
+    # 3.b.
     _update_subject_crosslistings(data)
+
+    # 3.c.
     _update_subject_offerings(data, term)
 
 def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
