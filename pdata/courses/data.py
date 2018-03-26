@@ -60,6 +60,8 @@ def update_term_data(data: dict) -> None:
   #   5. Update all of the offerings for each course. Similar to the above,
   #      the offerings are updated all at once and not *per-course*. The
   #      instructor-to-offering mapping is also performed here.
+  #   6. Update all of the meetings and the sections per offering. The meetings
+  #      and sections are updated in bulk, not individually.
 
   term_info = data['term']
 
@@ -78,10 +80,13 @@ def update_term_data(data: dict) -> None:
   _update_instructors_and_courses(term_info['subjects'])
 
   # 4.
-  _update_subject_crosslistings(term_info['subjects'])
+  _update_crosslistings(term_info['subjects'])
 
   # 5.
-  _update_subject_offerings(term_info['subjects'], term)
+  _update_offerings(term_info['subjects'], term)
+
+  # 6.
+  _update_sections(term_info['subjects'], term.pk)
 
 def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
   '''
@@ -151,7 +156,7 @@ def _update_instructors_and_courses(subject_data: typing.List[dict]) -> None:
     lambda d: hash('%s%d%s' % (d['department'], d['number'], d['letter'])),
     expected_courses)
 
-def _update_subject_crosslistings(subject_data: typing.List[dict]) -> None:
+def _update_crosslistings(subject_data: typing.List[dict]) -> None:
   '''
   Update all subjects' crosslistings for all of their courses.
 
@@ -183,14 +188,14 @@ def _update_subject_crosslistings(subject_data: typing.List[dict]) -> None:
     expected
     )
 
-def _update_subject_offerings(
-  subject_data: typing.List[dict],
-  semester: models.Semester)
-  -> None:
+def _update_offerings(
+    subject_data: typing.List[dict],
+    semester: models.Semester)
+    -> None:
   '''
-  Update all subjects' offerings for all of the courses in that subject. This
-  includes registering the many-to-many relationship between instructors and
-  offerings.
+  Update all subjects' courses' offerings for all of the courses in that
+  subject. This includes registering the many-to-many relationship between
+  instructors and offerings.
 
   :param subject_data: all subject data
   '''
@@ -210,7 +215,7 @@ def _update_subject_offerings(
 
         expected_offerings.append({
           'registrar_guid': course_info['guid'],
-          'course': course_pk,
+          'course_id': course_pk,
           'semester': semester,
           'start_date': arbitrary_class['schedule']['start_date'],
           'end_date': arbitrary_class['schedule']['end_date'],
@@ -224,10 +229,10 @@ def _update_subject_offerings(
     )
 
   # Create all of the m2m relationships between courses and instructors.
-  instructor_pk_map = {emplid: pk for (emplid, pk) in
-    models.Instructor.objects.all().values_list('employee_id', 'id')}
-  offering_pk_map = {guid: pk for (guid, pk) in
-    models.Offering.objects.all().values_list('registrar_guid', 'id')}
+  instructor_pk_map = dict(
+    models.Instructor.objects.all().values_list('employee_id', 'id'))
+  offering_pk_map = dict(
+    models.Offering.objects.all().values_list('registrar_guid', 'id'))
   expected_instructor_m2m = []
 
   for subject_info in subject_data:
@@ -246,6 +251,88 @@ def _update_subject_offerings(
     m2m_model.objects.all(),
     lambda d: hash('%d-%d' % (d['instructor_id'], d['offering-id'])),
     expected_instructor_m2m
+    )
+
+def _update_sections(
+    subject_data: typing.List[dict],
+    semester: models.Semester)
+    -> None:
+  '''
+  Update all subjects' courses' sections. This does *not* include meeting
+  times, which depend upon sections and locations; however, it does include
+  the locations themselves.
+
+  :param subject_data: all subject data
+  '''
+  offering_pk_map = dict(
+    models.Offering.objects.all().values_list('registrar_guid', 'id'))
+
+  expected_sections = []
+
+  status_map = {
+    'open': models.Section.STATUS_OPEN,
+    'closed': models.Section.STATUS_CLOSED,
+    'cancelled': models.Section.STATUS_CANCELLED,
+    }
+
+  for subject_info in subject_data:
+    for course_info in subject_info['courses']:
+      if len(course_info['classes']):
+        offering_pk = offering_pk_map[course_info['guid']]
+
+        for section_info in course_info['classes']:
+          expected_sections.append({
+            'offering_id': offering_pk,
+            'number': int(section_info['class_number']),
+            'section_id': section_info['section'],
+            'status': status_map[section_info['status'].lower()],
+            'capacity': int(section_info['capacity']),
+            'enrollment': int(section_info['enrollment']),
+            })
+
+  bulk_upsert(
+    models.Section.objects.all(),
+    lambda d: hash('%d-%d' % (d['offering_id'], d['number'])),
+    expected_sections,
+    )
+
+  day_map = {
+    's': models.Meeting.DAY_SUNDAY,
+    'm': models.Meeting.DAY_MONDAY,
+    't': models.Meeting.DAY_TUESDAY,
+    'w': models.Meeting.DAY_WEDNESDAY,
+    'th': models.Meeting.DAY_THURSDAY,
+    'f': models.Meeting.DAY_FRIDAY,
+    's': models.Meeting.DAY_SATURDAY,
+    }
+  section_pk_map = {('%d-%d' % (oid, num)): pk for (oid, num, pk) in
+    models.Section.objects.all().values_list('offering_id', 'number', 'id')}
+  expected_meetings = []
+
+  for subject_info in subject_data:
+    for course_info in subject_info['courses']:
+
+      if len(course_info['classes']):
+        for section_info in course_info['classes']:
+          section_pk = section_pk_map['%d-%d' % (
+            section_info['offering_id'], section_info['number'])]
+
+          for meeting_info in section_info['schedule']['meetings']:
+            for day in meeting_info['days']:
+              expected_meetings.append({
+                'section_id': section_pk,
+                'building': meeting_info['building']['short_name'],
+                'room': meeting_info['room'],
+                'number': int(meeting_info['number']),
+                'start_time': meeting_info['start_time'],
+                'end_time': meeting_info['end_time'],
+                'day': day_map[day.lower()],
+                })
+
+  bulk_upsert(
+    models.Meeting.objects.all(),
+    lambda d: hash('%d-%d-%d' % (d['section_id'], d['number'])),
+    expected_meetings
     )
 
 def _catalog_num_to_tuple(catalog_number: str) -> typing.Tuple[int, str]:
