@@ -39,20 +39,23 @@ def load_celery_tasks(sources: typing.List[str]) -> dict:
 
   return tasks
 
-@transaction.atomic
 def bulk_upsert(
   q: typing.Type[models.query.QuerySet],
   hash_data: typing.Callable[[typing.Dict[str, typing.Any]], int],
-  expected: typing.Set[typing.Dict[str, typing.Any]],
+  expected: typing.Iterable[typing.Dict[str, typing.Any]],
   delete: bool = False,
   ) -> typing.Dict[str, typing.Set[str]]:
   '''
-  Atomically bulk upsert objects. The queryset `q` is used to retrieve the
-  existing objects, and `expected` is a list of dictionarys (mapping field
-  names to values). One query is performed to find existing objects, and then
-  the updates are performed individually while inserts/deletes are performed
-  in bulk. The performance improvements come from the bulk insertions and
-  single filter query.
+  Bulk upsert objects. The queryset `q` is used to retrieve the existing
+  objects, and `expected` is a list of dictionarys (mapping field names to
+  values). One query is performed to find existing objects, and then the
+  updates are performed individually while inserts/deletes are performed in
+  bulk. The performance improvements come from the bulk insertions and single
+  filter query.
+
+  This operation is *not* performed atomically, so wrap the call to
+  `bulk_upsert` in a `transaction.atomic` context if you require it to be
+  atomic.
 
   For N existing objects (to update) and M objects to create, this performs
   N+2 database queries. In comparison, Django's `update_or_create` performs
