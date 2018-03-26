@@ -142,27 +142,6 @@ class Section(models.Model):
   class Meta:
     unique_together = ('offering', 'section_id')
 
-class Building(models.Model):
-  '''
-  The `Building` model represents a building along with the registrar-provided
-  information for that building.
-  '''
-  code = models.CharField(max_length=10, unique=True)
-  location_code = models.PositiveSmallIntegerField(unique=True)
-
-  name = models.CharField(max_length=255)
-  short_name = models.CharField(max_length=100)
-
-class Location(models.Model):
-  '''
-  The `Location` model represents a building and room in a course.
-  '''
-  building = models.ForeignKey(Building, on_delete=models.CASCADE)
-  room = models.CharField(max_length=10)
-
-  class Meta:
-    unique_together = ('building', 'room')
-
 class Meeting(models.Model):
   '''
   The `Meeting` model is for a single, well, meeting of a section.
@@ -172,7 +151,9 @@ class Meeting(models.Model):
   multiple meeting times.
   '''
   section = models.ForeignKey(Section, on_delete=models.CASCADE)
-  location = models.ForeignKey(Location, on_delete=models.CASCADE)
+
+  building = models.CharField(max_length=100)
+  room = models.CharField(max_length=10)
 
   #: Per-section unique number.
   number = models.PositiveSmallIntegerField()
