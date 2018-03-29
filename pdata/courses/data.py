@@ -321,7 +321,7 @@ def _update_sections(
             for day in meeting_info['days']:
               expected_meetings.append({
                 'section_id': section_pk,
-                'building': meeting_info['building']['short_name'],
+                'building': meeting_info['building']['name'],
                 'room': meeting_info['room'],
                 'number': int(meeting_info['number']),
                 'start_time': meeting_info['start_time'],

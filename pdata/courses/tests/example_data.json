@@ -1,0 +1,406 @@
+{
+  "term":[
+    {
+      "code":1184,
+      "suffix":"S2018",
+      "name":"S17-18",
+      "cal_name":"Spring 2018",
+      "reg_name":"17-18 Spr",
+      "start_date":"2018-02-05",
+      "end_date":"2018-06-05",
+      "subjects":[
+        {
+          "code":"AST",
+          "name":"Astrophysical Sciences",
+          "dept_code":"AST",
+          "dept":"Astrophysical Sciences",
+          "courses":[
+            {
+              "guid":"1184000726",
+              "course_id":"000726",
+              "catalog_number":"401",
+              "title":"Cosmology",
+              "detail":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "track":"UGRD",
+                "description":"A general review of extragalactic astronomy and cosmology.  Topics include the properties and nature of galaxies, clusters of galaxies, superclusters, the large-scale structure of the universe, evidence for the existence of Dark Matter and Dark Energy, the expanding universe, the early universe, and the formation and evolution of structure."
+              },
+              "instructors":[
+                {
+                  "emplid":"000000001",
+                  "first_name":"prof",
+                  "last_name":"Alpha",
+                  "full_name":"prof Alpha"
+                }
+              ],
+              "crosslistings":[
+                {
+                  "subject":"PHY",
+                  "catalog_number":"401"
+                }
+              ],
+              "classes":[
+                {
+                  "class_number":"40300",
+                  "section":"L01",
+                  "status":"Open",
+                  "type_name":"Lecture",
+                  "capacity":"999",
+                  "enrollment":"30",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"01:30 PM",
+                        "end_time":"02:50 PM",
+                        "days":[
+                          "M",
+                          "W"
+                        ],
+                        "building":{
+                          "building_code":"PEYTH",
+                          "location_code":"0133",
+                          "name":"Peyton Hall",
+                          "short_name":"Peyton Hal"
+                        },
+                        "room":"145"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "code":"COS",
+          "name":"Computer Science",
+          "dept_code":"COS",
+          "dept":"Computer Science",
+          "courses":[
+            {
+              "guid":"1184002065",
+              "course_id":"002065",
+              "catalog_number":"333",
+              "title":"Advanced Programming Techniques",
+              "detail":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "track":"UGRD",
+                "description":"This is a course about the practice of programming.  Programming is more than just writing code.  Programmers must also assess tradeoffs, choose among design alternatives, debug and test, improve performance, and maintain software written by themselves &amp; others. At the same time, they must be concerned with compatibility, robustness, and reliability, while meeting specifications.  Students will have the opportunity to develop these skills by working on their own code and in group projects."
+              },
+              "instructors":[
+                {
+                  "emplid":"000000002",
+                  "first_name":"Prof",
+                  "last_name":"Bravo",
+                  "full_name":"Prof Bravo"
+                },
+                {
+                  "emplid":"000000003",
+                  "first_name":"PRof",
+                  "last_name":"Charlie",
+                  "full_name":"PRof Charlie"
+                }
+              ],
+              "classes":[
+                {
+                  "class_number":"40160",
+                  "section":"L01",
+                  "status":"Open",
+                  "type_name":"Lecture",
+                  "capacity":"160",
+                  "enrollment":"128",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"11:00 AM",
+                        "end_time":"12:20 PM",
+                        "days":[
+                          "T",
+                          "Th"
+                        ],
+                        "building":{
+                          "building_code":"THOML",
+                          "location_code":"0163",
+                          "name":"Thomas Laboratory",
+                          "short_name":"Thomas Lab"
+                        },
+                        "room":"003"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "guid":"1184002074",
+              "course_id":"002074",
+              "catalog_number":"432",
+              "title":"Information Security",
+              "detail":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "track":"UGRD",
+                "description":"Course goals: learn how to design a secure system, probe systems for weaknesses, write code with fewer security bugs, use crypto libraries correctly, protect (or breach!) privacy, and use your powers ethically. Main topics: basic cryptography, system security, network security, firewalls, malware, web security, privacy technologies, cryptocurrencies, human factors, physical security, economics, and ethics of security."
+              },
+              "instructors":[
+                {
+                  "emplid":"000000004",
+                  "first_name":"PROf",
+                  "last_name":"Delta",
+                  "full_name":"PROf Delta"
+                }
+              ],
+              "crosslistings":[
+                {
+                  "subject":"ELE",
+                  "catalog_number":"432"
+                }
+              ],
+              "classes":[
+                {
+                  "class_number":"40184",
+                  "section":"L01",
+                  "status":"Open",
+                  "type_name":"Lecture",
+                  "capacity":"40",
+                  "enrollment":"30",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"11:00 AM",
+                        "end_time":"12:20 PM",
+                        "days":[
+                          "T",
+                          "Th"
+                        ],
+                        "building":{
+                          "building_code":"FRIEN",
+                          "location_code":"0616",
+                          "name":"Friend Center",
+                          "short_name":"Friend Cen"
+                        },
+                        "room":"004"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "guid":"1184002098",
+              "course_id":"002098",
+              "catalog_number":"518",
+              "title":"Advanced Computer Systems",
+              "detail":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "track":"GRAD",
+                "description":"COS-518 is a graduate course in computer systems. Its goals are: (1) To understand the core concepts of computer systems, rather than particular implementation details.  (2) To understand the state of the art in distributed, storage, mobile, and operating systems.  (3) To understand how to engage in cutting-edge systems research and development.  This course assumes a basic familiarity with computer systems and networking concepts."
+              },
+              "instructors":[
+                {
+                  "emplid":"000000005",
+                  "first_name":"PROF",
+                  "last_name":"Echo",
+                  "full_name":"PROF Echo"
+                }
+              ],
+              "classes":[
+                {
+                  "class_number":"42951",
+                  "section":"S01",
+                  "status":"Open",
+                  "type_name":"Seminar",
+                  "capacity":"30",
+                  "enrollment":"22",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"09:00 AM",
+                        "end_time":"10:20 AM",
+                        "days":[
+                          "M",
+                          "W"
+                        ],
+                        "building":{
+                          "building_code":"SHERH",
+                          "location_code":"0653",
+                          "name":"Sherrerd Hall",
+                          "short_name":"Sherrerd H"
+                        },
+                        "room":"001"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "code":"ISC",
+          "name":"Integrated Science Curriculum",
+          "dept_code":"QCB",
+          "dept":"Quantitative Computational Bio",
+          "courses":[
+            {
+              "guid":"1184009380",
+              "course_id":"009380",
+              "catalog_number":"233",
+              "title":"An Integrated, Quantitative Introduction to the Natural Sciences II",
+              "detail":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "track":"UGRD",
+                "description":"An integrated, mathematically and computationally sophisticated introduction to physics and chemistry, drawing on examples from biological systems.  This year long, four course sequence is a multidisciplinary course taught across multiple departments with the following faculty: C. Callan, J. Shaevitz (PHY); H. Yang (CHM); O. Troyanskaya (COS); P. Andolfatto (EEB); E. Wieschaus, M. Wuhr (MOL); B. Bratton, J. Gadd, A. Mayer, Q. Wang (LSI).  Five hours of lecture, one three-hour lab, one three-hour precept, one required evening problem session."
+              },
+              "instructors":[
+                {
+                  "emplid":"000000001",
+                  "first_name":"prof",
+                  "last_name":"Alpha",
+                  "full_name":"prof Alpha"
+                },
+                {
+                  "emplid":"000000004",
+                  "first_name":"PRof",
+                  "last_name":"Delta",
+                  "full_name":"PRof Delta"
+                },
+                {
+                  "emplid":"000000006",
+                  "first_name":"pROF",
+                  "last_name":"Foxtrot",
+                  "full_name":"pROF Foxtrot!"
+                }
+              ],
+              "crosslistings":[
+                {
+                  "subject":"CHM",
+                  "catalog_number":"233"
+                },
+                {
+                  "subject":"COS",
+                  "catalog_number":"233"
+                },
+                {
+                  "subject":"MOL",
+                  "catalog_number":"233"
+                },
+                {
+                  "subject":"PHY",
+                  "catalog_number":"233"
+                }
+              ],
+              "classes":[
+                {
+                  "class_number":"42038",
+                  "section":"L01",
+                  "status":"Open",
+                  "type_name":"Lecture",
+                  "capacity":"20",
+                  "enrollment":"18",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"10:00 AM",
+                        "end_time":"10:50 AM",
+                        "days":[
+                          "M",
+                          "W",
+                          "F"
+                        ],
+                        "building":{
+                          "building_code":"ICAHN",
+                          "location_code":"0620",
+                          "name":"Carl C. Icahn Laboratory",
+                          "short_name":"Carl C. Ic"
+                        },
+                        "room":"101"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "class_number":"42040",
+                  "section":"C01",
+                  "status":"Open",
+                  "type_name":"Class",
+                  "capacity":"40",
+                  "enrollment":"18",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"07:30 PM",
+                        "end_time":"08:50 PM",
+                        "days":[
+                          "W"
+                        ],
+                        "building":{
+                          "building_code":"ICAHN",
+                          "location_code":"0620",
+                          "name":"Carl C. Icahn Laboratory",
+                          "short_name":"Carl C. Ic"
+                        },
+                        "room":"100"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "class_number":"42041",
+                  "section":"B01",
+                  "status":"Open",
+                  "type_name":"Lab",
+                  "capacity":"20",
+                  "enrollment":"18",
+                  "schedule":{
+                    "start_date":"2018-02-05",
+                    "end_date":"2018-05-15",
+                    "meetings":[
+                      {
+                        "meeting_number":"1",
+                        "start_time":"01:30 PM",
+                        "end_time":"04:20 PM",
+                        "days":[
+                          "T"
+                        ],
+                        "building":{
+                          "building_code":"THOML",
+                          "location_code":"0163",
+                          "name":"Thomas Laboratory",
+                          "short_name":"Thomas Lab"
+                        },
+                        "room":"012"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
