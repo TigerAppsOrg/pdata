@@ -6,19 +6,21 @@
 #              dataset.
 
 import typing
-
 import logging
 import urllib.request
 import json
 
+from django.db import transaction
+
 from pdata.utils import bulk_upsert
-from . import models
+from courses import models
 
 BASE_URL = 'https://etcweb.princeton.edu/webfeeds/courseofferings/?term={term}&subject=all&fmt=json'
 LOGGER = logging.getLogger('pdata.courses')
 
-def fetch_term_data(term: typing.Union[str, int] = 'current')
-    -> typing.Optional[dict]:
+def fetch_term_data(
+    term: typing.Union[str, int] = 'current'
+    ) -> typing.Optional[dict]:
   '''
   Fetch the data associated with the given term.
 
@@ -62,15 +64,17 @@ def update_term_data(data: dict) -> None:
   #      instructor-to-offering mapping is also performed here.
   #   6. Update all of the meetings and the sections per offering. The meetings
   #      and sections are updated in bulk, not individually.
-
-  term_info = data['term']
+  try:
+    term_info = data['term'][0]
+  except IndexError:
+    return
 
   # 1.
   term, _ = models.Semester.objects.update_or_create(
     term_id=term_info['code'],
     defaults={
       'term': (models.Semester.TERM_FALL if 'F' in term_info['suffix']
-        else models.Semester.TERM_SPRING)
+        else models.Semester.TERM_SPRING),
       'year': int(term_info['suffix'][1:]),
       'start_date': term_info['start_date'],
       'end_date': term_info['end_date']
@@ -86,7 +90,7 @@ def update_term_data(data: dict) -> None:
   _update_offerings(term_info['subjects'], term)
 
   # 6.
-  _update_sections(term_info['subjects'], term.pk)
+  _update_sections(term_info['subjects'], term)
 
 def _get_course_pk_map(**kwargs) -> typing.Dict[str, int]:
   '''
@@ -134,14 +138,15 @@ def _update_instructors_and_courses(subject_data: typing.List[dict]) -> None:
 
       for instructor_info in course_info['instructors']:
         if instructor_info['emplid'] not in expected_emplid:
-          full_name = '%s %s' % (instructor['first_name'],
-            instructor['last_name'])
+          full_name = '%s %s' % (instructor_info['first_name'],
+            instructor_info['last_name'])
+
           expected_employees.append({
-            'employee_id': instructor['emplid'],
-            'first_name': instructor['first_name'],
-            'last_name': instructor['last_name'],
-            'full_name': (instructor['full_name']
-              if full_name != instructor['full_name'] else None),
+            'employee_id': instructor_info['emplid'],
+            'first_name': instructor_info['first_name'],
+            'last_name': instructor_info['last_name'],
+            'full_name': (instructor_info['full_name']
+              if full_name != instructor_info['full_name'] else None),
             })
           expected_emplid.add(instructor_info['emplid'])
 
@@ -171,7 +176,7 @@ def _update_crosslistings(subject_data: typing.List[dict]) -> None:
     for course_info in subject_info['courses']:
       course_pk = pk_map[course_info['catalog_number']]
 
-      for crosslisting_info in course_info['crosslistings']:
+      for crosslisting_info in course_info.get('crosslistings', []):
         num_tuple = _catalog_num_to_tuple(crosslisting_info['catalog_number'])
 
         expected.append({
@@ -190,8 +195,8 @@ def _update_crosslistings(subject_data: typing.List[dict]) -> None:
 
 def _update_offerings(
     subject_data: typing.List[dict],
-    semester: models.Semester)
-    -> None:
+    semester: models.Semester
+    ) -> None:
   '''
   Update all subjects' courses' offerings for all of the courses in that
   subject. This includes registering the many-to-many relationship between
@@ -216,15 +221,14 @@ def _update_offerings(
         expected_offerings.append({
           'registrar_guid': course_info['guid'],
           'course_id': course_pk,
-          'semester': semester,
+          'semester_id': semester.pk,
           'start_date': arbitrary_class['schedule']['start_date'],
           'end_date': arbitrary_class['schedule']['end_date'],
           })
 
   bulk_upsert(
     models.Offering.objects.all(),
-    lambda d: hash('%s%d%s-%d' % (
-      d['department'], d['number'], d['letter'], d['course_id'])),
+    lambda d: hash('%d-%d' % (d['semester_id'], d['course_id'])),
     expected_offerings
     )
 
@@ -232,13 +236,15 @@ def _update_offerings(
   instructor_pk_map = dict(
     models.Instructor.objects.all().values_list('employee_id', 'id'))
   offering_pk_map = dict(
-    models.Offering.objects.all().values_list('registrar_guid', 'id'))
+    models.Offering.objects
+      .filter(semester=semester)
+      .values_list('registrar_guid', 'id'))
   expected_instructor_m2m = []
 
   for subject_info in subject_data:
     for course_info in subject_info['courses']:
       if len(course_info['classes']):
-        offering_pk = offering_pk_map[course_info['guid']]
+        offering_pk = offering_pk_map[int(course_info['guid'])]
 
         for instructor_info in course_info['instructors']:
           expected_instructor_m2m.append({
@@ -246,17 +252,17 @@ def _update_offerings(
             'offering_id': offering_pk,
             })
 
-  m2m_model = models.Offering.instructors.through
+  m2m_model = models.Offering.instructor.through
   bulk_upsert(
     m2m_model.objects.all(),
-    lambda d: hash('%d-%d' % (d['instructor_id'], d['offering-id'])),
+    lambda d: hash('%d-%d' % (d['instructor_id'], d['offering_id'])),
     expected_instructor_m2m
     )
 
 def _update_sections(
     subject_data: typing.List[dict],
-    semester: models.Semester)
-    -> None:
+    semester: models.Semester
+    ) -> None:
   '''
   Update all subjects' courses' sections. This does *not* include meeting
   times, which depend upon sections and locations; however, it does include
@@ -265,7 +271,9 @@ def _update_sections(
   :param subject_data: all subject data
   '''
   offering_pk_map = dict(
-    models.Offering.objects.all().values_list('registrar_guid', 'id'))
+    models.Offering.objects
+      .filter(semester=semester)
+      .values_list('registrar_guid', 'id'))
 
   expected_sections = []
 
@@ -278,7 +286,7 @@ def _update_sections(
   for subject_info in subject_data:
     for course_info in subject_info['courses']:
       if len(course_info['classes']):
-        offering_pk = offering_pk_map[course_info['guid']]
+        offering_pk = offering_pk_map[int(course_info['guid'])]
 
         for section_info in course_info['classes']:
           expected_sections.append({
@@ -313,9 +321,11 @@ def _update_sections(
     for course_info in subject_info['courses']:
 
       if len(course_info['classes']):
+        offering_pk = offering_pk_map[int(course_info['guid'])]
+
         for section_info in course_info['classes']:
           section_pk = section_pk_map['%d-%d' % (
-            section_info['offering_id'], section_info['number'])]
+            offering_pk, int(section_info['class_number']))]
 
           for meeting_info in section_info['schedule']['meetings']:
             for day in meeting_info['days']:
@@ -323,7 +333,7 @@ def _update_sections(
                 'section_id': section_pk,
                 'building': meeting_info['building']['name'],
                 'room': meeting_info['room'],
-                'number': int(meeting_info['number']),
+                'number': int(meeting_info['meeting_number']),
                 'start_time': meeting_info['start_time'],
                 'end_time': meeting_info['end_time'],
                 'day': day_map[day.lower()],
@@ -331,7 +341,7 @@ def _update_sections(
 
   bulk_upsert(
     models.Meeting.objects.all(),
-    lambda d: hash('%d-%d-%d' % (d['section_id'], d['number'])),
+    lambda d: hash('%d-%d' % (d['section_id'], d['number'])),
     expected_meetings
     )
 
