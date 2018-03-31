@@ -16,7 +16,23 @@ from courses import models, data
 class ModelAssertions(object):
   '''
   Contains assertion functions for checking the equality of two model objects.
+  These assertions do not check foreign-key relationships.
   '''
+  def course_with_id(self, course: str) -> models.Course:
+    '''
+    Retrieve the course with the given identification string. The string is in
+    the format [dept][number][letter].
+
+    :param course: identification string for course
+
+    :return: course object, if found
+    '''
+    dept = course[:3].upper()
+    num = int(course[3:6])
+    letter = course[6:7]
+
+    return models.Course.objects.get(
+      department=dept, number=num, letter=letter)
 
   def assertSemesterEqual(self,
       s1: models.Semester, s2: models.Semester) -> None:
@@ -46,6 +62,7 @@ class ModelAssertions(object):
     self.assertEqual(cl1.department, cl2.department)
     self.assertEqual(cl1.number, cl2.number)
     self.assertEqual(cl1.letter, cl2.letter)
+    self.assertEqual(cl1.course_id, cl2.course_id)
 
   def assertInstructorEqual(self,
       i1: models.Instructor, i2: models.Instructor) -> None:
@@ -54,6 +71,15 @@ class ModelAssertions(object):
     self.assertEqual(i1.last_name, i2.last_name)
     self.assertEqual(i1.full_name, i2.full_name)
     self.assertEqual(i1.employee_id, i2.employee_id)
+
+  def assertOfferingEqual(self,
+      o1: models.Offering, o2: models.Offering) -> None:
+    '''Assert that two offerings are equal.'''
+    self.assertEqual(o1.registrar_guid, o2.registrar_guid)
+    self.assertEqual(o1.start_date, o2.start_date)
+    self.assertEqual(o1.end_date, o2.end_date)
+    self.assertEqual(o1.course_id, o2.course_id)
+    self.assertEqual(o1.semester_id, o2.semester_id)
 
 class TestUpdateTermData(TestCase, ModelAssertions):
   DATA_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -67,9 +93,8 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     self.assertSemesterEqual(sem, EXPECTED_OBJECTS['semester'])
 
-    self.assertEqual(models.Course.objects.count(), 5)
-
     # Verify all courses exist.
+    self.assertEqual(models.Course.objects.count(), 5)
     expected_courses = sorted(
       EXPECTED_OBJECTS['courses'].values(), key=lambda x: x.number)
     for index, c in enumerate(models.Course.objects.order_by('number')):
@@ -77,18 +102,16 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     # Verify all crosslistings.
     self.assertEqual(models.CrossListing.objects.count(), 6)
-    for course, clxs in EXPECTED_OBJECTS['crosslistings'].items():
-      dept = course[:3].upper()
-      num = int(course[3:6])
-      letter = course[6:7]
-
-      course = models.Course.objects.get(
-        department=dept, number=num, letter=letter)
+    for course_id, clxs in EXPECTED_OBJECTS['crosslistings'].items():
+      course = self.course_with_id(course_id)
       cl_existing = (models.CrossListing.objects
         .filter(course=course)
         .order_by('department'))
 
       clxs = sorted(clxs, key=lambda x: x.department)
+      for cl in clxs:
+        cl.course_id = course.pk
+
       for index, c in enumerate(cl_existing):
         self.assertCrossListingEqual(c, clxs[index])
 
@@ -99,6 +122,33 @@ class TestUpdateTermData(TestCase, ModelAssertions):
     instr_query = models.Instructor.objects.order_by('employee_id')
     for index, instr in enumerate(instr_query):
       self.assertInstructorEqual(instr, instr_expected[index])
+
+    # Verify all offerings.
+    self.assertEqual(models.Offering.objects.count(), 5)
+
+    for course_id, expected_offering in EXPECTED_OBJECTS['offerings'].items():
+      course = self.course_with_id(course_id)
+      existing_offering = models.Offering.objects.get(
+        course=course, semester=sem)
+      expected_offering.course_id = course.pk
+      expected_offering.semester_id = sem.pk
+
+      self.assertOfferingEqual(existing_offering, expected_offering)
+
+    # Verify instructor-offering mapping.
+    instr_offer_model = models.Offering.instructor.through
+    self.assertEqual(instr_offer_model.objects.count(), 8)
+    for course_id, instrs in EXPECTED_OBJECTS['offering-instructors'].items():
+      course = self.course_with_id(course_id)
+
+      expected_emplid = sorted(
+        [EXPECTED_OBJECTS['instructors'][x].employee_id for x in instrs])
+      existing_instr_pks = (instr_offer_model.objects
+        .filter(offering__course_id=course.pk)
+        .order_by('instructor__employee_id')
+        .values_list('instructor__employee_id', flat=True))
+
+      self.assertEqual(list(existing_instr_pks), list(expected_emplid))
 
   def test_update_term_data(self):
     with open(os.path.join(self.DATA_PATH, 'example_data.json')) as f:
@@ -174,29 +224,29 @@ EXPECTED_OBJECTS = {
     },
   'offerings': {
     'ast401': models.Offering(
-      registrar_guid='1184000726',
+      registrar_guid=1184000726,
       start_date=datetime.date(2018, 2, 5),
       end_date=datetime.date(2018, 5, 15),
       ),
     'cos333': models.Offering(
-      registrar_guid='1184002065',
-      start_date=datetime.datetime(2018, 2, 5),
-      end_date=datetime.datetime(2018, 5, 15),
+      registrar_guid=1184002065,
+      start_date=datetime.date(2018, 2, 5),
+      end_date=datetime.date(2018, 5, 15),
       ),
     'cos432': models.Offering(
-      registrar_guid='1184002074',
-      start_date=datetime.datetime(2018, 2, 5),
-      end_date=datetime.datetime(2018, 5, 15),
+      registrar_guid=1184002074,
+      start_date=datetime.date(2018, 2, 5),
+      end_date=datetime.date(2018, 5, 15),
       ),
     'cos518': models.Offering(
-      registrar_guid='1184002098',
-      start_date=datetime.datetime(2018, 2, 5),
-      end_date=datetime.datetime(2018, 5, 15),
+      registrar_guid=1184002098,
+      start_date=datetime.date(2018, 2, 5),
+      end_date=datetime.date(2018, 5, 15),
       ),
     'isc233': models.Offering(
-      registrar_guid='1184009380',
-      start_date=datetime.datetime(2018, 2, 5),
-      end_date=datetime.datetime(2018, 5, 15),
+      registrar_guid=1184009380,
+      start_date=datetime.date(2018, 2, 5),
+      end_date=datetime.date(2018, 5, 15),
       ),
     },
   'offering-instructors': {
@@ -213,9 +263,9 @@ EXPECTED_OBJECTS = {
       employee_id='000000002', first_name='Prof', last_name='Bravo'),
     'charlie': models.Instructor(
       employee_id='000000003', first_name='PRof', last_name='Charlie'),
-    'echo': models.Instructor(
-      employee_id='000000004', first_name='PROf', last_name='Delta'),
     'delta': models.Instructor(
+      employee_id='000000004', first_name='PROf', last_name='Delta'),
+    'echo': models.Instructor(
       employee_id='000000005', first_name='PROF', last_name='Echo'),
     'foxtrot': models.Instructor(
       employee_id='000000006',
