@@ -5,20 +5,114 @@
 # Description: Test data fetching/updating utilities.
 
 import typing
+import json
+import os
+import datetime
 
 from django.test import TestCase, SimpleTestCase
 
-from pdata.courses import models, data
+from courses import models, data
 
-class TestUpdateTermData(TestCase):
-  pass
+class ModelAssertions(object):
+  '''
+  Contains assertion functions for checking the equality of two model objects.
+  '''
+
+  def assertSemesterEqual(self,
+      s1: models.Semester, s2: models.Semester) -> None:
+    '''Assert that two semesters are equal.'''
+    self.assertEqual(s1.term, s2.term)
+    self.assertEqual(s1.year, s2.year)
+    self.assertEqual(s1.start_date, s2.start_date)
+    self.assertEqual(s1.end_date, s2.end_date)
+    self.assertEqual(s1.term_id, s2.term_id)
+
+  def assertCourseEqual(self,
+      c1: models.Course, c2: models.Course) -> None:
+    '''Assert that two courses are equal.'''
+    self.assertEqual(c1.title, c2.title)
+    self.assertEqual(c1.description, c2.description)
+    self.assertEqual(c1.distribution_area, c2.distribution_area)
+    self.assertEqual(c1.department, c2.department)
+    self.assertEqual(c1.number, c2.number)
+    self.assertEqual(c1.letter, c2.letter)
+    self.assertEqual(c1.track, c2.track)
+    self.assertEqual(c1.pdf_allowed, c2.pdf_allowed)
+    self.assertEqual(c1.audit_allowed, c2.audit_allowed)
+
+  def assertCrossListingEqual(self,
+      cl1: models.CrossListing, cl2: models.CrossListing) -> None:
+    '''Assert that two crosslistings are equal.'''
+    self.assertEqual(cl1.department, cl2.department)
+    self.assertEqual(cl1.number, cl2.number)
+    self.assertEqual(cl1.letter, cl2.letter)
+
+  def assertInstructorEqual(self,
+      i1: models.Instructor, i2: models.Instructor) -> None:
+    '''Assert that two instructors are equal.'''
+    self.assertEqual(i1.first_name, i2.first_name)
+    self.assertEqual(i1.last_name, i2.last_name)
+    self.assertEqual(i1.full_name, i2.full_name)
+    self.assertEqual(i1.employee_id, i2.employee_id)
+
+class TestUpdateTermData(TestCase, ModelAssertions):
+  DATA_PATH = os.path.dirname(os.path.realpath(__file__))
+
+  def assertDatabaseState(self):
+    '''
+    Assert that the database is in the expected state.
+    '''
+    self.assertEqual(models.Semester.objects.count(), 1)
+    sem = models.Semester.objects.get()
+
+    self.assertSemesterEqual(sem, EXPECTED_OBJECTS['semester'])
+
+    self.assertEqual(models.Course.objects.count(), 5)
+
+    # Verify all courses exist.
+    expected_courses = sorted(
+      EXPECTED_OBJECTS['courses'].values(), key=lambda x: x.number)
+    for index, c in enumerate(models.Course.objects.order_by('number')):
+      self.assertCourseEqual(c, expected_courses[index])
+
+    # Verify all crosslistings.
+    self.assertEqual(models.CrossListing.objects.count(), 6)
+    for course, clxs in EXPECTED_OBJECTS['crosslistings'].items():
+      dept = course[:3].upper()
+      num = int(course[3:6])
+      letter = course[6:7]
+
+      course = models.Course.objects.get(
+        department=dept, number=num, letter=letter)
+      cl_existing = (models.CrossListing.objects
+        .filter(course=course)
+        .order_by('department'))
+
+      clxs = sorted(clxs, key=lambda x: x.department)
+      for index, c in enumerate(cl_existing):
+        self.assertCrossListingEqual(c, clxs[index])
+
+    # Verify all instructors.
+    self.assertEqual(models.Instructor.objects.count(), 6)
+    instr_expected = sorted(
+      EXPECTED_OBJECTS['instructors'].values(), key=lambda x: x.employee_id)
+    instr_query = models.Instructor.objects.order_by('employee_id')
+    for index, instr in enumerate(instr_query):
+      self.assertInstructorEqual(instr, instr_expected[index])
+
+  def test_update_term_data(self):
+    with open(os.path.join(self.DATA_PATH, 'example_data.json')) as f:
+      json_data = json.load(f)
+
+    data.update_term_data(json_data)
+    self.assertDatabaseState()    
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
     term=models.Semester.TERM_SPRING,
     year=2018,
-    start_date='2018-02-05',
-    end_date='2018-06-05',
+    start_date=datetime.date(2018, 2, 5),
+    end_date=datetime.date(2018, 6, 5),
     term_id=1184,
     ),
   'courses': {
@@ -58,8 +152,8 @@ EXPECTED_OBJECTS = {
       pdf_allowed=False,
       audit_allowed=False,
       ),
-    'qcb233': models.Course(
-      department='QCB',
+    'isc233': models.Course(
+      department='ISC',
       number=233,
       title='An Integrated, Quantitative Introduction to the Natural Sciences II',
       description='An integrated, mathematically and computationally sophisticated introduction to physics and chemistry, drawing on examples from biological systems.  This year long, four course sequence is a multidisciplinary course taught across multiple departments with the following faculty: C. Callan, J. Shaevitz (PHY); H. Yang (CHM); O. Troyanskaya (COS); P. Andolfatto (EEB); E. Wieschaus, M. Wuhr (MOL); B. Bratton, J. Gadd, A. Mayer, Q. Wang (LSI).  Five hours of lecture, one three-hour lab, one three-hour precept, one required evening problem session.',
@@ -71,7 +165,7 @@ EXPECTED_OBJECTS = {
   'crosslistings': {
     'ast401': [models.CrossListing(department='PHY',number=401)],
     'cos432': [models.CrossListing(department='ELE', number=432)],
-    'qcb233:': [
+    'isc233': [
       models.CrossListing(department='CHM', number=233),
       models.CrossListing(department='COS', number=233),
       models.CrossListing(department='MOL', number=233),
@@ -81,28 +175,28 @@ EXPECTED_OBJECTS = {
   'offerings': {
     'ast401': models.Offering(
       registrar_guid='1184000726',
-      start_date='2018-02-05',
-      end_date='2018-05-15',
+      start_date=datetime.date(2018, 2, 5),
+      end_date=datetime.date(2018, 5, 15),
       ),
     'cos333': models.Offering(
       registrar_guid='1184002065',
-      start_date='2018-02-05',
-      end_date='2018-05-15',
+      start_date=datetime.datetime(2018, 2, 5),
+      end_date=datetime.datetime(2018, 5, 15),
       ),
     'cos432': models.Offering(
       registrar_guid='1184002074',
-      start_date='2018-02-05',
-      end_date='2018-05-15',
+      start_date=datetime.datetime(2018, 2, 5),
+      end_date=datetime.datetime(2018, 5, 15),
       ),
     'cos518': models.Offering(
       registrar_guid='1184002098',
-      start_date='2018-02-05',
-      end_date='2018-05-15',
+      start_date=datetime.datetime(2018, 2, 5),
+      end_date=datetime.datetime(2018, 5, 15),
       ),
-    'qcb233': models.Offering(
+    'isc233': models.Offering(
       registrar_guid='1184009380',
-      start_date='2018-02-05',
-      end_date='2018-05-15',
+      start_date=datetime.datetime(2018, 2, 5),
+      end_date=datetime.datetime(2018, 5, 15),
       ),
     },
   'offering-instructors': {
@@ -110,8 +204,8 @@ EXPECTED_OBJECTS = {
     'cos333': ['bravo', 'charlie'],
     'cos432': ['delta'],
     'cos518': ['echo'],
-    'qcb233': ['foxtrot', 'alpha', 'delta']
-    }
+    'isc233': ['foxtrot', 'alpha', 'delta']
+    },
   'instructors': {
     'alpha': models.Instructor(
       employee_id='000000001', first_name='prof', last_name='Alpha'),
@@ -162,7 +256,7 @@ EXPECTED_OBJECTS = {
           capacity=30,
           enrollment=22),
         },
-      'qcb233': {
+      'isc233': {
         'L01': models.Section(
           number=42038,
           section_id='L01',
@@ -256,7 +350,7 @@ EXPECTED_OBJECTS = {
             day=models.Meeting.DAY_WEDNESDAY)
           ]
         },
-      'qcb233': {
+      'isc233': {
         'L01': [
           models.Meeting(
             building='Carl C. Icahn Laboratory',

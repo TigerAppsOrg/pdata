@@ -117,7 +117,7 @@ def _update_instructors_and_courses(subject_data: typing.List[dict]) -> None:
   expected_courses = []
 
   for subject_info in subject_data:
-    dept = subject_info['code']
+    dept = subject_info['code'].upper()
 
     for course_info in subject_info['courses']:
       num_tuple = _catalog_num_to_tuple(course_info['catalog_number'])
@@ -126,12 +126,12 @@ def _update_instructors_and_courses(subject_data: typing.List[dict]) -> None:
         'number': num_tuple[0],
         'letter': num_tuple[1],
         'track': (models.Course.TRACK_UNDERGRAD
-            if course_info['detail']['track'] == 'UGRAD'
+            if course_info['detail']['track'] == 'UGRD'
             else models.Course.TRACK_GRAD),
         'title': course_info['title'],
         'description': course_info['detail']['description'],
         # TODO: these are not provided by the webfeed...
-        'distribution_area': '',
+        'distribution_area': None,
         'pdf_allowed': False,
         'audit_allowed': False,
         })
@@ -171,7 +171,7 @@ def _update_crosslistings(subject_data: typing.List[dict]) -> None:
   expected = []
 
   for subject_info in subject_data:
-    dept = subject_info['code']
+    dept = subject_info['code'].upper()
 
     for course_info in subject_info['courses']:
       course_pk = pk_map[course_info['catalog_number']]
