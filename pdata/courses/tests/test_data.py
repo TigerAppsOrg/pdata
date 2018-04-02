@@ -9,8 +9,10 @@ import json
 import os
 import datetime
 import itertools
+import copy
 
 from django.test import TestCase, SimpleTestCase
+from django.db import transaction
 
 from courses import models, data
 
@@ -109,27 +111,36 @@ class TestUpdateTermData(TestCase, ModelAssertions):
   '''
   DATA_PATH = os.path.dirname(os.path.realpath(__file__))
 
-  def assertDatabaseState(self):
+  @classmethod
+  def setUpClass(cls) -> None:
+    with open(os.path.join(cls.DATA_PATH, 'example_data.json')) as f:
+      cls.json_data = json.load(f)
+
+    super().setUpClass()
+
+  def assertDatabaseState(self, e:dict = None) -> None:
     '''
     Assert that the database is in the expected state.
+
+    :param e: expected objects
     '''
+    if e is None:
+      e = EXPECTED_OBJECTS
+
     self.assertEqual(models.Semester.objects.count(), 1)
     sem = models.Semester.objects.get()
 
-    self.assertSemesterEqual(sem, EXPECTED_OBJECTS['semester'])
+    self.assertSemesterEqual(sem, e['semester'])
 
     # Verify all courses exist.
-    self.assertEqual(models.Course.objects.count(), 5)
+    expected_courses = sorted(e['courses'].values(), key=lambda x: x.number)
 
-    expected_courses = sorted(
-      EXPECTED_OBJECTS['courses'].values(), key=lambda x: x.number)
+    self.assertEqual(models.Course.objects.count(), len(expected_courses))
     for index, c in enumerate(models.Course.objects.order_by('number')):
       self.assertCourseEqual(c, expected_courses[index])
 
     # Verify all crosslistings.
-    self.assertEqual(models.CrossListing.objects.count(), 6)
-
-    for course_id, clxs in EXPECTED_OBJECTS['crosslistings'].items():
+    for course_id, clxs in e['crosslistings'].items():
       course = self.course_with_id(course_id)
       cl_existing = (models.CrossListing.objects
         .filter(course=course)
@@ -139,22 +150,24 @@ class TestUpdateTermData(TestCase, ModelAssertions):
       for cl in clxs:
         cl.course_id = course.pk
 
+      self.assertEqual(cl_existing.count(), len(clxs))
       for index, c in enumerate(cl_existing):
         self.assertCrossListingEqual(c, clxs[index])
 
     # Verify all instructors.
-    self.assertEqual(models.Instructor.objects.count(), 6)
 
     instr_expected = sorted(
-      EXPECTED_OBJECTS['instructors'].values(), key=lambda x: x.employee_id)
+      e['instructors'].values(), key=lambda x: x.employee_id)
     instr_query = models.Instructor.objects.order_by('employee_id')
+
+    self.assertEqual(instr_query.count(), len(instr_expected))
     for index, instr in enumerate(instr_query):
       self.assertInstructorEqual(instr, instr_expected[index])
 
     # Verify all offerings.
-    self.assertEqual(models.Offering.objects.count(), 5)
+    self.assertEqual(models.Offering.objects.count(), len(e['offerings']))
 
-    for course_id, expected_offering in EXPECTED_OBJECTS['offerings'].items():
+    for course_id, expected_offering in e['offerings'].items():
       course = self.course_with_id(course_id)
       existing_offering = models.Offering.objects.get(
         course=course, semester=sem)
@@ -165,13 +178,12 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     # Verify instructor-offering mapping.
     instr_offer_model = models.Offering.instructor.through
-    self.assertEqual(instr_offer_model.objects.count(), 8)
 
-    for course_id, instrs in EXPECTED_OBJECTS['offering-instructors'].items():
+    for course_id, instrs in e['offering-instructors'].items():
       course = self.course_with_id(course_id)
 
       expected_emplid = sorted(
-        [EXPECTED_OBJECTS['instructors'][x].employee_id for x in instrs])
+        [e['instructors'][x].employee_id for x in instrs])
       existing_instr_pks = (instr_offer_model.objects
         .filter(offering__course_id=course.pk, offering__semester=sem)
         .order_by('instructor__employee_id')
@@ -182,7 +194,7 @@ class TestUpdateTermData(TestCase, ModelAssertions):
     # Verify all sections.
     self.assertEqual(models.Section.objects.count(), 7)
 
-    for course_id, sections in EXPECTED_OBJECTS['sections'].items():
+    for course_id, sections in e['sections'].items():
       course = self.course_with_id(course_id)
 
       expected_sections = sorted(sections.values(), key=lambda x: x.section_id)
@@ -191,15 +203,14 @@ class TestUpdateTermData(TestCase, ModelAssertions):
           offering__semester=sem)
         .order_by('section_id'))
 
+      self.assertEqual(existing_sections.count(), len(expected_sections))
       for index, existing_section in enumerate(existing_sections):
         expected_section = expected_sections[index]
         expected_section.offering_id = existing_section.offering_id
         self.assertSectionEqual(existing_section, expected_section)
 
     # Verify all meetings.
-    self.assertEqual(models.Meeting.objects.count(), 13)
-
-    for course_id, section_meetings in EXPECTED_OBJECTS['meetings'].items():
+    for course_id, section_meetings in e['meetings'].items():
       course = self.course_with_id(course_id)
 
       expected_meetings = sorted(
@@ -216,21 +227,115 @@ class TestUpdateTermData(TestCase, ModelAssertions):
           section__offering__semester=sem
         ).order_by('section__section_id', 'number'))
 
+      self.assertEqual(existing_meetings.count(), len(expected_meetings))
       for index, existing_meeting in enumerate(existing_meetings):
         expected_meeting = expected_meetings[index]
         expected_meeting.section_id = existing_meeting.section_id
         self.assertMeetingEqual(existing_meeting, expected_meeting)
 
-  def test_update_term_data(self):
+  def test_update_term_data_empty(self):
     '''
     update_term_data with an empty database should add the values to the
     database.
     '''
-    with open(os.path.join(self.DATA_PATH, 'example_data.json')) as f:
-      json_data = json.load(f)
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
 
-    data.update_term_data(json_data)
-    self.assertDatabaseState()    
+  def test_update_term_data_twice(self):
+    '''
+    update_term_data should work properly if applied in succession. No data
+    should change across the runs.
+    '''
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_initial(self):
+    '''
+    update_term_data should work properly when multiple objects already exist
+    in the database.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    def delete_set(xs):
+      for x in xs:
+        x.delete()
+
+    # Delete some arbitrary objects.
+    with transaction.atomic():
+      delete_set(models.Course.objects.order_by('?')[:1])
+      delete_set(models.CrossListing.objects.order_by('?')[:3])
+      delete_set(models.Instructor.objects.order_by('?')[:3])
+      delete_set(models.Offering.objects.order_by('?')[:1])
+      delete_set(models.Section.objects.order_by('?')[:2])
+      delete_set(models.Meeting.objects.order_by('?')[:3])
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_emptied(self):
+    '''
+    update_term_data should work properly when the database is cleared.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    # Delete everything!
+    with transaction.atomic():
+      models.Semester.objects.all().delete()
+      models.Course.objects.all().delete()
+      models.CrossListing.objects.all().delete()
+      models.Instructor.objects.all().delete()
+      models.Offering.objects.all().delete()
+      models.Section.objects.all().delete()
+      models.Meeting.objects.all().delete()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_updated(self):
+    '''
+    update_term_data will reset the database to the original state when rerun
+    to a modified database.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    c = models.Course.objects.get(department='AST', number=401)
+    c.title = 'Totally Not Cosmology'
+    c.save()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_updated_data(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    modified_json_data = copy.deepcopy(self.json_data)
+    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
+
+    m =  modified_json_data['term'][0]
+    # AST 401
+    m['subjects'][0]['courses'][0]['title'] = 'Not Actually Cosmology'
+    modified_expected['courses']['ast401'].title = 'Not Actually Cosmology'
+
+    # COS 518
+    m['subjects'][1]['courses'][2]['instructors'][0]['emplid'] = '000000420'
+    modified_expected['instructors']['echo'].employee_id = '000000420'
+    modified_expected['instructors']['_'] = models.Instructor(
+      employee_id='000000005', first_name='PROF', last_name='Echo')
+    modified_expected['offering-instructors']['cos518'].append('_')
+
+    data.update_term_data(modified_json_data)
+    self.assertDatabaseState(modified_expected)
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
