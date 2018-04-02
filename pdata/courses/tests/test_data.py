@@ -8,6 +8,7 @@ import typing
 import json
 import os
 import datetime
+import itertools
 
 from django.test import TestCase, SimpleTestCase
 
@@ -81,7 +82,31 @@ class ModelAssertions(object):
     self.assertEqual(o1.course_id, o2.course_id)
     self.assertEqual(o1.semester_id, o2.semester_id)
 
+  def assertSectionEqual(self,
+      s1: models.Section, s2: models.Section) -> None:
+    '''Assert that two sections are equal.'''
+    self.assertEqual(s1.number, s2.number)
+    self.assertEqual(s1.section_id, s2.section_id)
+    self.assertEqual(s1.status, s2.status)
+    self.assertEqual(s1.capacity, s2.capacity)
+    self.assertEqual(s1.enrollment, s2.enrollment)
+    self.assertEqual(s1.offering_id, s2.offering_id)
+
+  def assertMeetingEqual(self,
+      m1: models.Meeting, m2: models.Meeting) -> None:
+    '''Assert that two meetings are equal.'''
+    self.assertEqual(m1.building, m2.building)
+    self.assertEqual(m1.room, m2.room)
+    self.assertEqual(m1.number, m2.number)
+    self.assertEqual(m1.start_time, m2.start_time)
+    self.assertEqual(m1.end_time, m2.end_time)
+    self.assertEqual(m1.day, m2.day)
+    self.assertEqual(m1.section_id, m2.section_id)
+
 class TestUpdateTermData(TestCase, ModelAssertions):
+  '''
+  Test the update_term_data function for updating a term's data dynamically.
+  '''
   DATA_PATH = os.path.dirname(os.path.realpath(__file__))
 
   def assertDatabaseState(self):
@@ -95,6 +120,7 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     # Verify all courses exist.
     self.assertEqual(models.Course.objects.count(), 5)
+
     expected_courses = sorted(
       EXPECTED_OBJECTS['courses'].values(), key=lambda x: x.number)
     for index, c in enumerate(models.Course.objects.order_by('number')):
@@ -102,6 +128,7 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     # Verify all crosslistings.
     self.assertEqual(models.CrossListing.objects.count(), 6)
+
     for course_id, clxs in EXPECTED_OBJECTS['crosslistings'].items():
       course = self.course_with_id(course_id)
       cl_existing = (models.CrossListing.objects
@@ -117,6 +144,7 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     # Verify all instructors.
     self.assertEqual(models.Instructor.objects.count(), 6)
+
     instr_expected = sorted(
       EXPECTED_OBJECTS['instructors'].values(), key=lambda x: x.employee_id)
     instr_query = models.Instructor.objects.order_by('employee_id')
@@ -138,19 +166,66 @@ class TestUpdateTermData(TestCase, ModelAssertions):
     # Verify instructor-offering mapping.
     instr_offer_model = models.Offering.instructor.through
     self.assertEqual(instr_offer_model.objects.count(), 8)
+
     for course_id, instrs in EXPECTED_OBJECTS['offering-instructors'].items():
       course = self.course_with_id(course_id)
 
       expected_emplid = sorted(
         [EXPECTED_OBJECTS['instructors'][x].employee_id for x in instrs])
       existing_instr_pks = (instr_offer_model.objects
-        .filter(offering__course_id=course.pk)
+        .filter(offering__course_id=course.pk, offering__semester=sem)
         .order_by('instructor__employee_id')
         .values_list('instructor__employee_id', flat=True))
 
       self.assertEqual(list(existing_instr_pks), list(expected_emplid))
 
+    # Verify all sections.
+    self.assertEqual(models.Section.objects.count(), 7)
+
+    for course_id, sections in EXPECTED_OBJECTS['sections'].items():
+      course = self.course_with_id(course_id)
+
+      expected_sections = sorted(sections.values(), key=lambda x: x.section_id)
+      existing_sections = (models.Section.objects.filter(
+          offering__course_id=course.pk,
+          offering__semester=sem)
+        .order_by('section_id'))
+
+      for index, existing_section in enumerate(existing_sections):
+        expected_section = expected_sections[index]
+        expected_section.offering_id = existing_section.offering_id
+        self.assertSectionEqual(existing_section, expected_section)
+
+    # Verify all meetings.
+    self.assertEqual(models.Meeting.objects.count(), 13)
+
+    for course_id, section_meetings in EXPECTED_OBJECTS['meetings'].items():
+      course = self.course_with_id(course_id)
+
+      expected_meetings = sorted(
+        # First, sorted by section_id
+        itertools.chain.from_iterable(
+          map(
+            lambda x: x[1],
+            sorted(section_meetings.items(), key=lambda x: x[0]))),
+        # Now, sorted by number
+        key=lambda x: x.number,
+        )
+      existing_meetings = (models.Meeting.objects.filter(
+          section__offering__course_id=course.pk,
+          section__offering__semester=sem
+        ).order_by('section__section_id', 'number'))
+
+      for index, existing_meeting in enumerate(existing_meetings):
+        expected_meeting = expected_meetings[index]
+        expected_meeting.section_id = existing_meeting.section_id
+        self.assertMeetingEqual(existing_meeting, expected_meeting)
+
   def test_update_term_data(self):
+    '''
+    update_term_data with an empty database should add the values to the
+    database.
+    '''
     with open(os.path.join(self.DATA_PATH, 'example_data.json')) as f:
       json_data = json.load(f)
 
@@ -334,15 +409,15 @@ EXPECTED_OBJECTS = {
             building='Peyton Hall',
             room='145',
             number=1,
-            start_time='1:30 PM',
-            end_time='02:50 PM',
+            start_time=datetime.time(13, 30),
+            end_time=datetime.time(14, 50),
             day=models.Meeting.DAY_MONDAY),
           models.Meeting(
             building='Peyton Hall',
             room='145',
             number=1,
-            start_time='1:30 PM',
-            end_time='02:50 PM',
+            start_time=datetime.time(13, 30),
+            end_time=datetime.time(14, 50),
             day=models.Meeting.DAY_WEDNESDAY),
           ]
         },
@@ -352,15 +427,15 @@ EXPECTED_OBJECTS = {
             building='Thomas Laboratory',
             room='003',
             number=1,
-            start_time='11:00 AM',
-            end_time='12:20 PM',
+            start_time=datetime.time(11, 00),
+            end_time=datetime.time(12, 20),
             day=models.Meeting.DAY_TUESDAY),
           models.Meeting(
             building='Thomas Laboratory',
             room='003',
             number=1,
-            start_time='11:00 AM',
-            end_time='12:20 PM',
+            start_time=datetime.time(11, 00),
+            end_time=datetime.time(12, 20),
             day=models.Meeting.DAY_THURSDAY)
           ]
         },
@@ -370,15 +445,15 @@ EXPECTED_OBJECTS = {
             building='Friend Center',
             room='004',
             number=1,
-            start_time='11:00 AM',
-            end_time='12:20 PM',
+            start_time=datetime.time(11, 00),
+            end_time=datetime.time(12, 20),
             day=models.Meeting.DAY_TUESDAY),
           models.Meeting(
             building='Friend Center',
             room='004',
             number=1,
-            start_time='11:00 AM',
-            end_time='12:20 PM',
+            start_time=datetime.time(11, 00),
+            end_time=datetime.time(12, 20),
             day=models.Meeting.DAY_TUESDAY)
           ]
         },
@@ -388,15 +463,15 @@ EXPECTED_OBJECTS = {
             building='Sherrerd Hall',
             room='001',
             number=1,
-            start_time='09:00 AM',
-            end_time='10:20 AM',
+            start_time=datetime.time(9, 00),
+            end_time=datetime.time(10, 20),
             day=models.Meeting.DAY_MONDAY),
           models.Meeting(
             building='Sherrerd Hall',
             room='001',
             number=1,
-            start_time='09:00 AM',
-            end_time='10:20 AM',
+            start_time=datetime.time(9, 00),
+            end_time=datetime.time(10, 20),
             day=models.Meeting.DAY_WEDNESDAY)
           ]
         },
@@ -406,22 +481,22 @@ EXPECTED_OBJECTS = {
             building='Carl C. Icahn Laboratory',
             room='101',
             number=1,
-            start_time='10:00 AM',
-            end_time='10:50 AM',
+            start_time=datetime.time(10, 0),
+            end_time=datetime.time(10, 50),
             day=models.Meeting.DAY_MONDAY),
           models.Meeting(
             building='Carl C. Icahn Laboratory',
             room='101',
             number=1,
-            start_time='10:00 AM',
-            end_time='10:50 AM',
+            start_time=datetime.time(10, 0),
+            end_time=datetime.time(10, 50),
             day=models.Meeting.DAY_WEDNESDAY),
           models.Meeting(
             building='Carl C. Icahn Laboratory',
             room='101',
             number=1,
-            start_time='10:00 AM',
-            end_time='10:50 AM',
+            start_time=datetime.time(10, 0),
+            end_time=datetime.time(10, 50),
             day=models.Meeting.DAY_FRIDAY),
           ],
         'C01': [
@@ -429,8 +504,8 @@ EXPECTED_OBJECTS = {
             building='Carl C. Icahn Laboratory',
             room='100',
             number=1,
-            start_time='07:30 PM',
-            end_time='08:50 PM',
+            start_time=datetime.time(19, 30),
+            end_time=datetime.time(20, 50),
             day=models.Meeting.DAY_WEDNESDAY),
           ],
         'B01': [
@@ -438,8 +513,8 @@ EXPECTED_OBJECTS = {
             building='Thomas Laboratory',
             room='012',
             number=1,
-            start_time='01:30 PM',
-            end_time='04:20 PM',
+            start_time=datetime.time(13, 30),
+            end_time=datetime.time(17, 20),
             day=models.Meeting.DAY_TUESDAY),
           ],
         },
