@@ -9,6 +9,7 @@ import typing
 import logging
 import urllib.request
 import json
+import datetime
 
 from django.db import transaction
 
@@ -329,14 +330,14 @@ def _update_sections(
 
           for meeting_info in section_info['schedule']['meetings']:
             for day in meeting_info['days']:
-              print(section_pk, day)
+
               expected_meetings.append({
                 'section_id': section_pk,
                 'building': meeting_info['building']['name'],
                 'room': meeting_info['room'],
                 'number': int(meeting_info['meeting_number']),
-                'start_time': meeting_info['start_time'],
-                'end_time': meeting_info['end_time'],
+                'start_time': _parse_time(meeting_info['start_time']),
+                'end_time': _parse_time(meeting_info['end_time']),
                 'day': day_map[day.lower()],
                 })
 
@@ -345,6 +346,18 @@ def _update_sections(
     lambda d: hash('%d-%d-%d' % (d['section_id'], d['number'], d['day'])),
     expected_meetings
     )
+
+def _parse_time(time_str: str, fmt: str = '%I:%M %p') -> datetime.time:
+  '''
+  Parse a provided time string into a datetime.time object.
+  
+  :param time_str: time string to parse
+  :param fmt: format of string (default: '%h:%M %p')
+
+  :return: parsed datetime.time object
+  '''
+  dt = datetime.datetime.strptime(time_str, fmt)
+  return dt.time()
 
 def _catalog_num_to_tuple(catalog_number: str) -> typing.Tuple[int, str]:
   '''

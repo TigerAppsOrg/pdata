@@ -454,7 +454,7 @@ EXPECTED_OBJECTS = {
             number=1,
             start_time=datetime.time(11, 00),
             end_time=datetime.time(12, 20),
-            day=models.Meeting.DAY_TUESDAY)
+            day=models.Meeting.DAY_THURSDAY)
           ]
         },
       'cos518': {
@@ -514,7 +514,7 @@ EXPECTED_OBJECTS = {
             room='012',
             number=1,
             start_time=datetime.time(13, 30),
-            end_time=datetime.time(17, 20),
+            end_time=datetime.time(16, 20),
             day=models.Meeting.DAY_TUESDAY),
           ],
         },
