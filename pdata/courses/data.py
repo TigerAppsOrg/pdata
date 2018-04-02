@@ -329,6 +329,7 @@ def _update_sections(
 
           for meeting_info in section_info['schedule']['meetings']:
             for day in meeting_info['days']:
+              print(section_pk, day)
               expected_meetings.append({
                 'section_id': section_pk,
                 'building': meeting_info['building']['name'],
@@ -341,7 +342,7 @@ def _update_sections(
 
   bulk_upsert(
     models.Meeting.objects.all(),
-    lambda d: hash('%d-%d' % (d['section_id'], d['number'])),
+    lambda d: hash('%d-%d-%d' % (d['section_id'], d['number'], d['day'])),
     expected_meetings
     )
 

@@ -180,4 +180,4 @@ class Meeting(models.Model):
     ))
 
   class Meta:
-    unique_together = ('section', 'number')
+    unique_together = ('section', 'number', 'day')
