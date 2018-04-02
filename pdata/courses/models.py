@@ -161,22 +161,18 @@ class Meeting(models.Model):
   start_time = models.TimeField()
   end_time = models.TimeField()
 
-  #: Days of the week where 0 is Sunday, 1 is Monday, and so forth.
-  DAY_SUNDAY = 0
-  DAY_MONDAY = 1
-  DAY_TUESDAY = 2
-  DAY_WEDNESDAY = 3
-  DAY_THURSDAY = 4
-  DAY_FRIDAY = 5
-  DAY_SATURDAY = 6
+  #: Days of the week where 0 is Monday, 1 is Tuesday, and so forth.
+  DAY_MONDAY = 0
+  DAY_TUESDAY = 1
+  DAY_WEDNESDAY = 2
+  DAY_THURSDAY = 3
+  DAY_FRIDAY = 4
   day = models.PositiveSmallIntegerField(choices=(
-    (DAY_SUNDAY, 'Sunday'),
     (DAY_MONDAY, 'Monday'),
     (DAY_TUESDAY, 'Tuesday'),
     (DAY_WEDNESDAY, 'Wednesday'),
     (DAY_THURSDAY, 'Thursday'),
     (DAY_FRIDAY, 'Friday'),
-    (DAY_SATURDAY, 'Saturday'),
     ))
 
   class Meta:

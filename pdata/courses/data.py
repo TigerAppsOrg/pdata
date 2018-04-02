@@ -306,13 +306,11 @@ def _update_sections(
     )
 
   day_map = {
-    's': models.Meeting.DAY_SUNDAY,
     'm': models.Meeting.DAY_MONDAY,
     't': models.Meeting.DAY_TUESDAY,
     'w': models.Meeting.DAY_WEDNESDAY,
     'th': models.Meeting.DAY_THURSDAY,
     'f': models.Meeting.DAY_FRIDAY,
-    's': models.Meeting.DAY_SATURDAY,
     }
   section_pk_map = {('%d-%d' % (oid, num)): pk for (oid, num, pk) in
     models.Section.objects.all().values_list('offering_id', 'number', 'id')}
