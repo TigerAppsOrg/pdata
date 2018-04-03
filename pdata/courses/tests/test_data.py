@@ -6,10 +6,11 @@
 
 import typing
 import json
-import os
+import os.path
 import datetime
 import itertools
 import copy
+import contextlib
 
 from django.test import TestCase, SimpleTestCase
 from django.db import transaction
@@ -118,6 +119,20 @@ class TestUpdateTermData(TestCase, ModelAssertions):
 
     super().setUpClass()
 
+  @contextlib.contextmanager
+  def modification_test(self) -> None:
+    data.update_term_data(self.json_data)
+
+    modified_json_data = copy.deepcopy(self.json_data)
+    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
+
+    m =  modified_json_data['term'][0]
+
+    yield (modified_expected, m)
+
+    data.update_term_data(modified_json_data)
+    self.assertDatabaseState(modified_expected)
+
   def assertDatabaseState(self, e:dict = None) -> None:
     '''
     Assert that the database is in the expected state.
@@ -155,7 +170,6 @@ class TestUpdateTermData(TestCase, ModelAssertions):
         self.assertCrossListingEqual(c, clxs[index])
 
     # Verify all instructors.
-
     instr_expected = sorted(
       e['instructors'].values(), key=lambda x: x.employee_id)
     instr_query = models.Instructor.objects.order_by('employee_id')
@@ -220,14 +234,18 @@ class TestUpdateTermData(TestCase, ModelAssertions):
             lambda x: x[1],
             sorted(section_meetings.items(), key=lambda x: x[0]))),
         # Now, sorted by number
-        key=lambda x: x.number,
-        )
-      existing_meetings = (models.Meeting.objects.filter(
+        key=lambda x: (x.number, x.day))
+
+      # Must be manually sorted, outside of database, to match the sorting
+      # above.
+      existing_meetings = sorted(
+        (models.Meeting.objects.filter(
           section__offering__course_id=course.pk,
           section__offering__semester=sem
-        ).order_by('section__section_id', 'number'))
+        ).order_by('section__section_id')),
+        key=lambda x: (x.number, x.day))
 
-      self.assertEqual(existing_meetings.count(), len(expected_meetings))
+      self.assertEqual(len(existing_meetings), len(expected_meetings))
       for index, existing_meeting in enumerate(existing_meetings):
         expected_meeting = expected_meetings[index]
         expected_meeting.section_id = existing_meeting.section_id
@@ -311,31 +329,55 @@ class TestUpdateTermData(TestCase, ModelAssertions):
     data.update_term_data(self.json_data)
     self.assertDatabaseState()
 
-  def test_update_term_data_updated_data(self):
+  def test_update_term_data_updated_course_title(self):
     '''
     update_term_data will update the appropriate data when the JSON data is
     updated.
+
+    Data fields updated: course title.
     '''
-    # Start with all of the initial data.
-    data.update_term_data(self.json_data)
+    with self.modification_test() as (e, m):
+      # AST 401
+      m['subjects'][0]['courses'][0]['title'] = 'Not Actually Cosmology'
+      e['courses']['ast401'].title = 'Not Actually Cosmology'
 
-    modified_json_data = copy.deepcopy(self.json_data)
-    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
+  def test_update_term_data_updated_added_instructor(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
 
-    m =  modified_json_data['term'][0]
-    # AST 401
-    m['subjects'][0]['courses'][0]['title'] = 'Not Actually Cosmology'
-    modified_expected['courses']['ast401'].title = 'Not Actually Cosmology'
+    Data fields updated: course instructor.
+    '''
+    with self.modification_test() as (e, m):
+      # COS 518
+      m['subjects'][1]['courses'][2]['instructors'][0]['emplid'] = '000000420'
+      e['instructors']['echo'].employee_id = '000000420'
+      e['instructors']['_'] = models.Instructor(
+        employee_id='000000005', first_name='PROF', last_name='Echo')
+      e['offering-instructors']['cos518'].append('_')
 
-    # COS 518
-    m['subjects'][1]['courses'][2]['instructors'][0]['emplid'] = '000000420'
-    modified_expected['instructors']['echo'].employee_id = '000000420'
-    modified_expected['instructors']['_'] = models.Instructor(
-      employee_id='000000005', first_name='PROF', last_name='Echo')
-    modified_expected['offering-instructors']['cos518'].append('_')
+  def test_update_term_data_updated_schedule(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
 
-    data.update_term_data(modified_json_data)
-    self.assertDatabaseState(modified_expected)
+    Data fields updated: meeting days and start_time.
+    '''
+    with self.modification_test() as (e, m):
+      # COS 432
+      schedule = m['subjects'][1]['courses'][1]['classes'][0]['schedule']
+      schedule['start_date'] = '2018-03-05'
+      schedule['meetings'][0]['days'].append('W')
+
+      e['offerings']['cos432'].start_date = datetime.date(2018, 3, 5)
+      e['meetings']['cos432']['L01'].append(
+        models.Meeting(
+          building='Friend Center',
+          room='004',
+          number=1,
+          start_time=datetime.time(11, 00),
+          end_time=datetime.time(12, 20),
+          day=models.Meeting.DAY_WEDNESDAY))
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
@@ -453,175 +495,175 @@ EXPECTED_OBJECTS = {
       last_name='Foxtrot',
       full_name='pROF Foxtrot!'),
     },
-    'sections': {
-      'ast401': {
-        'L01': models.Section(
-          number=40300,
-          section_id='L01',
-          status=models.Section.STATUS_OPEN,
-          capacity=999,
-          enrollment=30),
-        },
-      'cos333': {
-        'L01': models.Section(
-          number=40160,
-          section_id='L01',
-          status=models.Section.STATUS_OPEN,
-          capacity=160,
-          enrollment=128),
-        },
-      'cos432': {
-        'L01': models.Section(
-          number=40184,
-          section_id='L01',
-          status=models.Section.STATUS_OPEN,
-          capacity=40,
-          enrollment=30),
-        },
-      'cos518': {
-        'S01': models.Section(
-          number=42951,
-          section_id='S01',
-          status=models.Section.STATUS_OPEN,
-          capacity=30,
-          enrollment=22),
-        },
-      'isc233': {
-        'L01': models.Section(
-          number=42038,
-          section_id='L01',
-          status=models.Section.STATUS_OPEN,
-          capacity=20,
-          enrollment=18),
-        'C01': models.Section(
-          number=42040,
-          section_id='C01',
-          status=models.Section.STATUS_OPEN,
-          capacity=40,
-          enrollment=18),
-        'B01': models.Section(
-          number=42041,
-          section_id='B01',
-          status=models.Section.STATUS_OPEN,
-          capacity=20,
-          enrollment=18),
-        },
+  'sections': {
+    'ast401': {
+      'L01': models.Section(
+        number=40300,
+        section_id='L01',
+        status=models.Section.STATUS_OPEN,
+        capacity=999,
+        enrollment=30),
       },
-    'meetings': {
-      'ast401': {
-        'L01': [
-          models.Meeting(
-            building='Peyton Hall',
-            room='145',
-            number=1,
-            start_time=datetime.time(13, 30),
-            end_time=datetime.time(14, 50),
-            day=models.Meeting.DAY_MONDAY),
-          models.Meeting(
-            building='Peyton Hall',
-            room='145',
-            number=1,
-            start_time=datetime.time(13, 30),
-            end_time=datetime.time(14, 50),
-            day=models.Meeting.DAY_WEDNESDAY),
-          ]
-        },
-      'cos333': {
-        'L01': [
-          models.Meeting(
-            building='Thomas Laboratory',
-            room='003',
-            number=1,
-            start_time=datetime.time(11, 00),
-            end_time=datetime.time(12, 20),
-            day=models.Meeting.DAY_TUESDAY),
-          models.Meeting(
-            building='Thomas Laboratory',
-            room='003',
-            number=1,
-            start_time=datetime.time(11, 00),
-            end_time=datetime.time(12, 20),
-            day=models.Meeting.DAY_THURSDAY)
-          ]
-        },
-      'cos432': {
-        'L01': [
-          models.Meeting(
-            building='Friend Center',
-            room='004',
-            number=1,
-            start_time=datetime.time(11, 00),
-            end_time=datetime.time(12, 20),
-            day=models.Meeting.DAY_TUESDAY),
-          models.Meeting(
-            building='Friend Center',
-            room='004',
-            number=1,
-            start_time=datetime.time(11, 00),
-            end_time=datetime.time(12, 20),
-            day=models.Meeting.DAY_THURSDAY)
-          ]
-        },
-      'cos518': {
-        'S01': [
-          models.Meeting(
-            building='Sherrerd Hall',
-            room='001',
-            number=1,
-            start_time=datetime.time(9, 00),
-            end_time=datetime.time(10, 20),
-            day=models.Meeting.DAY_MONDAY),
-          models.Meeting(
-            building='Sherrerd Hall',
-            room='001',
-            number=1,
-            start_time=datetime.time(9, 00),
-            end_time=datetime.time(10, 20),
-            day=models.Meeting.DAY_WEDNESDAY)
-          ]
-        },
-      'isc233': {
-        'L01': [
-          models.Meeting(
-            building='Carl C. Icahn Laboratory',
-            room='101',
-            number=1,
-            start_time=datetime.time(10, 0),
-            end_time=datetime.time(10, 50),
-            day=models.Meeting.DAY_MONDAY),
-          models.Meeting(
-            building='Carl C. Icahn Laboratory',
-            room='101',
-            number=1,
-            start_time=datetime.time(10, 0),
-            end_time=datetime.time(10, 50),
-            day=models.Meeting.DAY_WEDNESDAY),
-          models.Meeting(
-            building='Carl C. Icahn Laboratory',
-            room='101',
-            number=1,
-            start_time=datetime.time(10, 0),
-            end_time=datetime.time(10, 50),
-            day=models.Meeting.DAY_FRIDAY),
-          ],
-        'C01': [
-          models.Meeting(
-            building='Carl C. Icahn Laboratory',
-            room='100',
-            number=1,
-            start_time=datetime.time(19, 30),
-            end_time=datetime.time(20, 50),
-            day=models.Meeting.DAY_WEDNESDAY),
-          ],
-        'B01': [
-          models.Meeting(
-            building='Thomas Laboratory',
-            room='012',
-            number=1,
-            start_time=datetime.time(13, 30),
-            end_time=datetime.time(16, 20),
-            day=models.Meeting.DAY_TUESDAY),
-          ],
-        },
+    'cos333': {
+      'L01': models.Section(
+        number=40160,
+        section_id='L01',
+        status=models.Section.STATUS_OPEN,
+        capacity=160,
+        enrollment=128),
       },
+    'cos432': {
+      'L01': models.Section(
+        number=40184,
+        section_id='L01',
+        status=models.Section.STATUS_OPEN,
+        capacity=40,
+        enrollment=30),
+      },
+    'cos518': {
+      'S01': models.Section(
+        number=42951,
+        section_id='S01',
+        status=models.Section.STATUS_OPEN,
+        capacity=30,
+        enrollment=22),
+      },
+    'isc233': {
+      'L01': models.Section(
+        number=42038,
+        section_id='L01',
+        status=models.Section.STATUS_OPEN,
+        capacity=20,
+        enrollment=18),
+      'C01': models.Section(
+        number=42040,
+        section_id='C01',
+        status=models.Section.STATUS_OPEN,
+        capacity=40,
+        enrollment=18),
+      'B01': models.Section(
+        number=42041,
+        section_id='B01',
+        status=models.Section.STATUS_OPEN,
+        capacity=20,
+        enrollment=18),
+      },
+    },
+  'meetings': {
+    'ast401': {
+      'L01': [
+        models.Meeting(
+          building='Peyton Hall',
+          room='145',
+          number=1,
+          start_time=datetime.time(13, 30),
+          end_time=datetime.time(14, 50),
+          day=models.Meeting.DAY_MONDAY),
+        models.Meeting(
+          building='Peyton Hall',
+          room='145',
+          number=1,
+          start_time=datetime.time(13, 30),
+          end_time=datetime.time(14, 50),
+          day=models.Meeting.DAY_WEDNESDAY),
+        ]
+      },
+    'cos333': {
+      'L01': [
+        models.Meeting(
+          building='Thomas Laboratory',
+          room='003',
+          number=1,
+          start_time=datetime.time(11, 00),
+          end_time=datetime.time(12, 20),
+          day=models.Meeting.DAY_TUESDAY),
+        models.Meeting(
+          building='Thomas Laboratory',
+          room='003',
+          number=1,
+          start_time=datetime.time(11, 00),
+          end_time=datetime.time(12, 20),
+          day=models.Meeting.DAY_THURSDAY)
+        ]
+      },
+    'cos432': {
+      'L01': [
+        models.Meeting(
+          building='Friend Center',
+          room='004',
+          number=1,
+          start_time=datetime.time(11, 00),
+          end_time=datetime.time(12, 20),
+          day=models.Meeting.DAY_TUESDAY),
+        models.Meeting(
+          building='Friend Center',
+          room='004',
+          number=1,
+          start_time=datetime.time(11, 00),
+          end_time=datetime.time(12, 20),
+          day=models.Meeting.DAY_THURSDAY)
+        ]
+      },
+    'cos518': {
+      'S01': [
+        models.Meeting(
+          building='Sherrerd Hall',
+          room='001',
+          number=1,
+          start_time=datetime.time(9, 00),
+          end_time=datetime.time(10, 20),
+          day=models.Meeting.DAY_MONDAY),
+        models.Meeting(
+          building='Sherrerd Hall',
+          room='001',
+          number=1,
+          start_time=datetime.time(9, 00),
+          end_time=datetime.time(10, 20),
+          day=models.Meeting.DAY_WEDNESDAY)
+        ]
+      },
+    'isc233': {
+      'L01': [
+        models.Meeting(
+          building='Carl C. Icahn Laboratory',
+          room='101',
+          number=1,
+          start_time=datetime.time(10, 0),
+          end_time=datetime.time(10, 50),
+          day=models.Meeting.DAY_MONDAY),
+        models.Meeting(
+          building='Carl C. Icahn Laboratory',
+          room='101',
+          number=1,
+          start_time=datetime.time(10, 0),
+          end_time=datetime.time(10, 50),
+          day=models.Meeting.DAY_WEDNESDAY),
+        models.Meeting(
+          building='Carl C. Icahn Laboratory',
+          room='101',
+          number=1,
+          start_time=datetime.time(10, 0),
+          end_time=datetime.time(10, 50),
+          day=models.Meeting.DAY_FRIDAY),
+        ],
+      'C01': [
+        models.Meeting(
+          building='Carl C. Icahn Laboratory',
+          room='100',
+          number=1,
+          start_time=datetime.time(19, 30),
+          end_time=datetime.time(20, 50),
+          day=models.Meeting.DAY_WEDNESDAY),
+        ],
+      'B01': [
+        models.Meeting(
+          building='Thomas Laboratory',
+          room='012',
+          number=1,
+          start_time=datetime.time(13, 30),
+          end_time=datetime.time(16, 20),
+          day=models.Meeting.DAY_TUESDAY),
+        ],
+      },
+    },
   }
