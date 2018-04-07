@@ -206,8 +206,6 @@ class TestUpdateTermData(TestCase, ModelAssertions):
       self.assertEqual(list(existing_instr_pks), list(expected_emplid))
 
     # Verify all sections.
-    self.assertEqual(models.Section.objects.count(), 7)
-
     for course_id, sections in e['sections'].items():
       course = self.course_with_id(course_id)
 
@@ -378,6 +376,97 @@ class TestUpdateTermData(TestCase, ModelAssertions):
           start_time=datetime.time(11, 00),
           end_time=datetime.time(12, 20),
           day=models.Meeting.DAY_WEDNESDAY))
+
+  def test_update_term_data_updated_enrollment(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
+
+    Data fields updated: course enrollment
+    '''
+    with self.modification_test() as (e, m):
+      # COS 432
+      cos432 = m['subjects'][1]['courses'][1]['classes'][0]
+      new_enrollment = int(cos432['capacity']) - 1
+      cos432['enrollment'] = str(new_enrollment)
+
+      e['sections']['cos432']['L01'].enrollment = new_enrollment
+
+  def test_update_term_data_added_section(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
+
+    Data fields updated: section added.
+    '''
+    with self.modification_test() as (e, m):
+      # COS 432
+      classes = m['subjects'][1]['courses'][1]['classes']
+      classes.append({
+        'class_number': '100000',
+        'section': 'L02',
+        'status': 'Open',
+        'type_name': 'Lecture',
+        'capacity': '20',
+        'enrollment': '18',
+        'schedule': {
+          'start_date':'2018-02-05',
+          'end_date':'2018-05-15',
+          'meetings':[{
+            'meeting_number':'2',
+            'start_time':'11:00 AM',
+            'end_time':'11:50 AM',
+            'days':[
+              'F',
+              'T',
+            ],
+            'building':{
+              'building_code':'SHERH',
+              'location_code':'0653',
+              'name':'Sherrerd Hall',
+              'short_name':'Sherrerd H'
+            },
+            'room':'101'}]
+          },
+        })
+
+      e['sections']['cos432']['L02'] = models.Section(
+        number=100000,
+        section_id='L02',
+        status=models.Section.STATUS_OPEN,
+        capacity=20,
+        enrollment=18
+        )
+      e['meetings']['cos432']['L02'] = [
+        models.Meeting(
+          number=2,
+          building='Sherrerd Hall',
+          room='101',
+          start_time=datetime.time(11, 0),
+          end_time=datetime.time(11, 50),
+          day=models.Meeting.DAY_FRIDAY
+          ),
+        models.Meeting(
+          number=2,
+          building='Sherrerd Hall',
+          room='101',
+          start_time=datetime.time(11, 0),
+          end_time=datetime.time(11, 50),
+          day=models.Meeting.DAY_TUESDAY
+          )
+      ]
+
+  def test_update_term_data_cancelled_section(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
+
+    Data fields updated: section status.
+    '''
+    with self.modification_test() as (e, m):
+      # AST 401
+      m['subjects'][0]['courses'][0]['classes'][0]['status'] = 'Cancelled'
+      e['sections']['ast401']['L01'].status = models.Section.STATUS_CANCELLED
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
