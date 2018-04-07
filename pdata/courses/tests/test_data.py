@@ -150,7 +150,7 @@ class TestUpdateTermData(TestCase, ModelAssertions):
     # Verify all courses exist.
     expected_courses = sorted(e['courses'].values(), key=lambda x: x.number)
 
-    self.assertEqual(models.Course.objects.count(), len(expected_courses))
+    self.assertEqual(models.Course.objects.count(), len(expected_courses), ' '.join('%s%d' % (c.department, c.number) for c in expected_courses))
     for index, c in enumerate(models.Course.objects.order_by('number')):
       self.assertCourseEqual(c, expected_courses[index])
 
@@ -467,6 +467,114 @@ class TestUpdateTermData(TestCase, ModelAssertions):
       # AST 401
       m['subjects'][0]['courses'][0]['classes'][0]['status'] = 'Cancelled'
       e['sections']['ast401']['L01'].status = models.Section.STATUS_CANCELLED
+
+  def test_update_term_data_updated_added_course(self):
+    '''
+    update_term_data will update the appropriate data when the JSON data is
+    updated.
+
+    Data fields updated: course, subject.
+    '''
+    with self.modification_test() as (e, m):
+      # CGS 312
+      m['subjects'].append({
+        'code': 'CGS',
+        'name': 'Cognitive Science',
+        'dept_code': 'CGS',
+        'dept': 'Cognitive Science',
+        'courses': [{
+          "guid":"1184014437",
+          "course_id":"014437",
+          "catalog_number":"312",
+          "title":"Cognitive Science of Metaethics",
+          "detail":{
+            "start_date":"2018-02-05",
+            "end_date":"2018-05-15",
+            "track":"UGRD",
+            "description":"Are ethical and other normative judgments (like those of aesthetics) objective or in some sense relative?  Can such judgments be true or false, or do they express a different type of mental state altogether (like &quot;Ouch!&quot;)?  Philosophers and cognitive scientists have begun using empirical methods to address these types of questions in metaethics. This course provides an introduction to these questions and surveys the recent experimental work. In the first part of the course, we'll discuss moral realism vs. anti-realism. In the second part, we'll look at the nature of normative disagreement and its role in specific metaethical theories."
+          },
+          "instructors":[{
+            "emplid":"000000007",
+            "first_name":"prOF",
+            "last_name":"Golf",
+            "full_name":"prOF Golf"
+          }],
+          "crosslistings":[
+            {"subject":"CHV","catalog_number":"317"},
+            {"subject":"PHI","catalog_number":"349"},
+          ],
+          "classes":[
+            {
+              "class_number":"43353",
+              "section":"C01",
+              "status":"Open",
+              "type_name":"Class",
+              "capacity":"30",
+              "enrollment":"14",
+              "schedule":{
+                "start_date":"2018-02-05",
+                "end_date":"2018-05-15",
+                "meetings":[{
+                  "meeting_number":"3",
+                  "start_time":"01:30 PM",
+                  "end_time":"02:50 PM",
+                  "days":["M", "W"],
+                  "building":{
+                    "building_code":"FINEH",
+                    "location_code":"0139",
+                    "name":"Fine Hall",
+                    "short_name":"Fine Hall "
+                    },
+                    "room":"322"}]}}]
+          }]
+        })
+        
+      e['courses']['cgs312'] = models.Course(
+        department='CGS',
+        number=312,
+        title='Cognitive Science of Metaethics',
+        description="Are ethical and other normative judgments (like those of aesthetics) objective or in some sense relative?  Can such judgments be true or false, or do they express a different type of mental state altogether (like &quot;Ouch!&quot;)?  Philosophers and cognitive scientists have begun using empirical methods to address these types of questions in metaethics. This course provides an introduction to these questions and surveys the recent experimental work. In the first part of the course, we'll discuss moral realism vs. anti-realism. In the second part, we'll look at the nature of normative disagreement and its role in specific metaethical theories.",
+        track=models.Course.TRACK_UNDERGRAD,
+        pdf_allowed=False,
+        audit_allowed=False
+        )
+      e['crosslistings']['cgs312'] = [
+        models.CrossListing(department='CHV', number=317),
+        models.CrossListing(department='PHI', number=349)
+        ]
+      e['offerings']['cgs312'] = models.Offering(
+        registrar_guid=1184014437,
+        start_date=datetime.date(2018, 2, 5),
+        end_date=datetime.date(2018, 5, 15)
+        )
+      e['offering-instructors']['cgs312'] = ['golf']
+      e['instructors']['golf'] = models.Instructor(
+        employee_id='000000007',
+        first_name='prOF',
+        last_name='Golf',
+        )
+      e['sections']['cgs312'] = {'C01': models.Section(
+        number=43353,
+        section_id='C01',
+        status=models.Section.STATUS_OPEN,
+        capacity=30,
+        enrollment=14)}
+      e['meetings']['cgs312'] = {'C01': [
+        models.Meeting(
+          building='Fine Hall',
+          room='322',
+          number=3,
+          start_time=datetime.time(13, 30),
+          end_time=datetime.time(14, 50),
+          day=models.Meeting.DAY_MONDAY),
+        models.Meeting(
+          building='Fine Hall',
+          room='322',
+          number=3,
+          start_time=datetime.time(13, 30),
+          end_time=datetime.time(14, 50),
+          day=models.Meeting.DAY_WEDNESDAY),
+        ]}
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
