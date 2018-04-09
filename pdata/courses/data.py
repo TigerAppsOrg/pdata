@@ -13,31 +13,44 @@ import datetime
 
 from django.db import transaction
 
+from pdata.data import Dataset
 from pdata.utils import bulk_upsert
 from courses import models
 
 BASE_URL = 'https://etcweb.princeton.edu/webfeeds/courseofferings/?term={term}&subject=all&fmt=json'
 LOGGER = logging.getLogger('pdata.courses')
 
-def fetch_term_data(
+class CourseDataset(Dataset):
+  '''
+  Course dataset definition.
+  '''
+  @property
+  def tasks(self) -> typing.List[dict]:
+    return [
+      {
+        'task': 'fetch_and_update_term_data',
+        'schedule': 60,
+        }
+      ]
+
+def update_term(
     term: typing.Union[str, int] = 'current'
-    ) -> typing.Optional[dict]:
+    ) -> None:
   '''
   Fetch the data associated with the given term.
 
-  :param term: term to obtain data for
-
-  :return: data for given term
+  :param term: term to obtain and update
   '''
   url = BASE_URL.format(term=term)
+
   try:
     req = urllib.request.urlopen(url)
   except urllib.error.URLError as e:
     LOGGER.error('Could not fetch term data: %s' % str(e))
     return None
-  else:
-    data = req.read()
-    return json.parse(data)
+  
+  data = json.load(req)
+  update_term_data(data)
 
 @transaction.atomic
 def update_term_data(data: dict) -> None:
