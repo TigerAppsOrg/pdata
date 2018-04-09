@@ -11,17 +11,28 @@ import datetime
 import itertools
 import copy
 import contextlib
+import unittest.mock
 
 from django.test import TestCase, SimpleTestCase
 from django.db import transaction
 
 from courses import models, data
 
-class ModelAssertions(object):
+class CourseDatasetTestBase(object):
   '''
   Contains assertion functions for checking the equality of two model objects.
-  These assertions do not check foreign-key relationships.
+  In addition, contains code for fetching the example data and asserting that
+  the database state matches it.
   '''
+  DATA_PATH = os.path.dirname(os.path.realpath(__file__))
+
+  def read_data(cls) -> None:
+    '''
+    Read the example data and store it in cls.json_data.
+    '''
+    with open(os.path.join(cls.DATA_PATH, 'example_data.json')) as f:
+      cls.json_data = json.load(f)
+
   def course_with_id(self, course: str) -> models.Course:
     '''
     Retrieve the course with the given identification string. The string is in
@@ -37,6 +48,27 @@ class ModelAssertions(object):
 
     return models.Course.objects.get(
       department=dept, number=num, letter=letter)
+
+  @contextlib.contextmanager
+  def modification_test(self) -> None:
+    '''
+    Run a test with modifications performed in the expected results and
+    input data.
+
+    Yields (results, input) which should be modified, in-place, by the
+    context.
+    '''
+    data.update_term_data(self.json_data)
+
+    modified_json_data = copy.deepcopy(self.json_data)
+    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
+
+    m =  modified_json_data['term'][0]
+
+    yield (modified_expected, m)
+
+    data.update_term_data(modified_json_data)
+    self.assertDatabaseState(modified_expected)
 
   def assertSemesterEqual(self,
       s1: models.Semester, s2: models.Semester) -> None:
@@ -105,33 +137,6 @@ class ModelAssertions(object):
     self.assertEqual(m1.end_time, m2.end_time)
     self.assertEqual(m1.day, m2.day)
     self.assertEqual(m1.section_id, m2.section_id)
-
-class TestUpdateTermData(TestCase, ModelAssertions):
-  '''
-  Test the update_term_data function for updating a term's data dynamically.
-  '''
-  DATA_PATH = os.path.dirname(os.path.realpath(__file__))
-
-  @classmethod
-  def setUpClass(cls) -> None:
-    with open(os.path.join(cls.DATA_PATH, 'example_data.json')) as f:
-      cls.json_data = json.load(f)
-
-    super().setUpClass()
-
-  @contextlib.contextmanager
-  def modification_test(self) -> None:
-    data.update_term_data(self.json_data)
-
-    modified_json_data = copy.deepcopy(self.json_data)
-    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
-
-    m =  modified_json_data['term'][0]
-
-    yield (modified_expected, m)
-
-    data.update_term_data(modified_json_data)
-    self.assertDatabaseState(modified_expected)
 
   def assertDatabaseState(self, e:dict = None) -> None:
     '''
@@ -248,84 +253,6 @@ class TestUpdateTermData(TestCase, ModelAssertions):
         expected_meeting = expected_meetings[index]
         expected_meeting.section_id = existing_meeting.section_id
         self.assertMeetingEqual(existing_meeting, expected_meeting)
-
-  def test_update_term_data_empty(self):
-    '''
-    update_term_data with an empty database should add the values to the
-    database.
-    '''
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
-
-  def test_update_term_data_twice(self):
-    '''
-    update_term_data should work properly if applied in succession. No data
-    should change across the runs.
-    '''
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
-
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
-
-  def test_update_term_data_initial(self):
-    '''
-    update_term_data should work properly when multiple objects already exist
-    in the database.
-    '''
-    # Start with all of the initial data.
-    data.update_term_data(self.json_data)
-
-    def delete_set(xs):
-      for x in xs:
-        x.delete()
-
-    # Delete some arbitrary objects.
-    with transaction.atomic():
-      delete_set(models.Course.objects.order_by('?')[:1])
-      delete_set(models.CrossListing.objects.order_by('?')[:3])
-      delete_set(models.Instructor.objects.order_by('?')[:3])
-      delete_set(models.Offering.objects.order_by('?')[:1])
-      delete_set(models.Section.objects.order_by('?')[:2])
-      delete_set(models.Meeting.objects.order_by('?')[:3])
-
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
-
-  def test_update_term_data_emptied(self):
-    '''
-    update_term_data should work properly when the database is cleared.
-    '''
-    # Start with all of the initial data.
-    data.update_term_data(self.json_data)
-
-    # Delete everything!
-    with transaction.atomic():
-      models.Semester.objects.all().delete()
-      models.Course.objects.all().delete()
-      models.CrossListing.objects.all().delete()
-      models.Instructor.objects.all().delete()
-      models.Offering.objects.all().delete()
-      models.Section.objects.all().delete()
-      models.Meeting.objects.all().delete()
-
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
-
-  def test_update_term_data_updated(self):
-    '''
-    update_term_data will reset the database to the original state when rerun
-    to a modified database.
-    '''
-    # Start with all of the initial data.
-    data.update_term_data(self.json_data)
-
-    c = models.Course.objects.get(department='AST', number=401)
-    c.title = 'Totally Not Cosmology'
-    c.save()
-
-    data.update_term_data(self.json_data)
-    self.assertDatabaseState()
 
   def test_update_term_data_updated_course_title(self):
     '''
@@ -575,6 +502,211 @@ class TestUpdateTermData(TestCase, ModelAssertions):
           end_time=datetime.time(14, 50),
           day=models.Meeting.DAY_WEDNESDAY),
         ]}
+
+class TestCourseDataset(TestCase, CourseDatasetTestBase):
+  '''
+  Test the update_term function for fetching and updating a term's data.
+  '''
+  @classmethod
+  def setUpClass(cls) -> None:
+    super().setUpClass()
+    CourseDatasetTestBase.read_data(cls)
+
+  @contextlib.contextmanager
+  def modification_test(self) -> None:
+    '''
+    Modification test for update_term.
+    '''
+    self.with_response(self.json_data)
+
+    modified_json_data = copy.deepcopy(self.json_data)
+    modified_expected = copy.deepcopy(EXPECTED_OBJECTS)
+
+    m =  modified_json_data['term'][0]
+
+    yield (modified_expected, m)
+
+    self.with_response(modified_json_data)
+    self.assertDatabaseState(modified_expected)
+
+  def with_response(self, response: dict, status: int = 200):
+    '''
+    Call update_term with the urlopen call returning a set response.
+
+    :param response: expected response
+    :param status: expected status code
+    '''
+    with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
+      mock_resp = mock_urlopen.return_value
+      mock_resp.status = status
+      mock_resp.read.return_value = json.dumps(response)
+
+      data.update_term('current')
+
+  def test_update_term_empty(self):
+    '''
+    update_term with an empty database should add the values to the
+    database.
+    '''
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_twice(self):
+    '''
+    update_term should work properly if applied in succession. No data
+    should change across the runs.
+    '''
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_initial(self):
+    '''
+    update_term should work properly when multiple objects already exist
+    in the database.
+    '''
+    # Start with all of the initial data.
+    self.with_response(self.json_data)
+
+    def delete_set(xs):
+      for x in xs:
+        x.delete()
+
+    # Delete some arbitrary objects.
+    with transaction.atomic():
+      delete_set(models.Course.objects.order_by('?')[:1])
+      delete_set(models.CrossListing.objects.order_by('?')[:3])
+      delete_set(models.Instructor.objects.order_by('?')[:3])
+      delete_set(models.Offering.objects.order_by('?')[:1])
+      delete_set(models.Section.objects.order_by('?')[:2])
+      delete_set(models.Meeting.objects.order_by('?')[:3])
+
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_emptied(self):
+    '''
+    update_term should work properly when the database is cleared.
+    '''
+    # Start with all of the initial data.
+    self.with_response(self.json_data)
+
+    # Delete everything!
+    with transaction.atomic():
+      models.Semester.objects.all().delete()
+      models.Course.objects.all().delete()
+      models.CrossListing.objects.all().delete()
+      models.Instructor.objects.all().delete()
+      models.Offering.objects.all().delete()
+      models.Section.objects.all().delete()
+      models.Meeting.objects.all().delete()
+
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_updated(self):
+    '''
+    update_term will reset the database to the original state when rerun
+    to a modified database.
+    '''
+    # Start with all of the initial data.
+    self.with_response(self.json_data)
+
+    c = models.Course.objects.get(department='AST', number=401)
+    c.title = 'Totally Not Cosmology'
+    c.save()
+
+    self.with_response(self.json_data)
+    self.assertDatabaseState()
+
+class TestUpdateTermData(TestCase, CourseDatasetTestBase):
+  '''
+  Test the update_term_data function for updating a term's data dynamically.
+  '''
+  @classmethod
+  def setUpClass(cls) -> None:
+    super().setUpClass()
+    CourseDatasetTestBase.read_data(cls)
+
+  def test_update_term_data_empty(self):
+    '''
+    update_term_data with an empty database should add the values to the
+    database.
+    '''
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_twice(self):
+    '''
+    update_term_data should work properly if applied in succession. No data
+    should change across the runs.
+    '''
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_initial(self):
+    '''
+    update_term_data should work properly when multiple objects already exist
+    in the database.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    def delete_set(xs):
+      for x in xs:
+        x.delete()
+
+    # Delete some arbitrary objects.
+    with transaction.atomic():
+      delete_set(models.Course.objects.order_by('?')[:1])
+      delete_set(models.CrossListing.objects.order_by('?')[:3])
+      delete_set(models.Instructor.objects.order_by('?')[:3])
+      delete_set(models.Offering.objects.order_by('?')[:1])
+      delete_set(models.Section.objects.order_by('?')[:2])
+      delete_set(models.Meeting.objects.order_by('?')[:3])
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_emptied(self):
+    '''
+    update_term_data should work properly when the database is cleared.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    # Delete everything!
+    with transaction.atomic():
+      models.Semester.objects.all().delete()
+      models.Course.objects.all().delete()
+      models.CrossListing.objects.all().delete()
+      models.Instructor.objects.all().delete()
+      models.Offering.objects.all().delete()
+      models.Section.objects.all().delete()
+      models.Meeting.objects.all().delete()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
+
+  def test_update_term_data_updated(self):
+    '''
+    update_term_data will reset the database to the original state when rerun
+    to a modified database.
+    '''
+    # Start with all of the initial data.
+    data.update_term_data(self.json_data)
+
+    c = models.Course.objects.get(department='AST', number=401)
+    c.title = 'Totally Not Cosmology'
+    c.save()
+
+    data.update_term_data(self.json_data)
+    self.assertDatabaseState()
 
 EXPECTED_OBJECTS = {
   'semester': models.Semester(
