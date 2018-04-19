@@ -1,5 +1,5 @@
-Contribution Guide
-==================
+Contribution Guidelines
+=======================
 
 Repository Guidelines
 ---------------------
@@ -41,21 +41,30 @@ Developers should strive to keep this record clean and easy to understand.
    project in the form of environment variables.
 
 #. Follow the
-   `Git Branching Workflow <https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows>`_.
-   The :code:`master` branch is reserved for production-ready code; any code
-   ready to be tested should be merged into :code:`dev` branch. :code:`dev` is
-   pushed to the staging server and :code:`master` is pushed to the production
-   server, as necessary. Any features, bug fixes, or other work should be done
-   separately in an appropriately named branch. These branches are generally
-   prefixed with :code:`dev` (such as :code:`dev-api-refactor`). Bug fixes, on
-   the other hand, would be prefixed with :code:`bugfix` (such as
-   :code:`bugfix-17`, referring to an issue 17).
+   `Master-stable branching workflow <https://guides.github.com/introduction/flow/>`_.
+   The :code:`master` branch is stable and tested, and can be deployed at any
+   time. :code:`master` will be deployed to staging and then promoted to
+   production once fully tested. Any features, bug fixes, or other work should
+   be done separately in an appropriately named branch. These branches are
+   generally prefixed with :code:`dev` (such as :code:`dev/api-refactor`). Bug
+   fixes, on the other hand, would be prefixed with :code:`bugfix` (such as
+   :code:`bugfix/17`, referring to issue 17).
 
    A good tutorial for the branching workflow is presented on
    `GitHub <https://guides.github.com/introduction/flow/>`_.
 
+   :note:
+      We use :code:`master` as the main branch instead of a development branch
+      (such as :code:`dev`) because this encourages stabler code throughout
+      development, not just during deployment. It also allows for continuous
+      deployment. This practice is followed in
+      many large organizations, including `Facebook <https://code.facebook.com/posts/270314900139291/rapid-release-at-massive-scale/>`_
+      and `Microsoft <https://docs.microsoft.com/en-us/vsts/git/concepts/git-branching-guidance#keep-your-branch-strategy-simple>`_.
+
 #. Do not force push (:code:`$ git push -f` or :code:`$ git push --force`) to
-   any upstream branch.
+   any upstream branch, unless you are the only person working on the branch.
+   Force pushes rewrite history that can lead to forks in the repository if
+   anyone else relies on (i.e. has a copy of) that history.
 
 #. Use GitHub issues to track feature requests and bugs. Create issues for any
    new bugs introduced (hopefully none) or found. Make sure to label issues
@@ -82,22 +91,18 @@ As a review of the repository guidelines, this is the expected workflow:
 4. Decide on files to commit
 5. Commit with proper title and description
 6. Push current branch first and wait for status checks to pass
-7. Merge with :code:`dev` and then push
-8. Submit a pull request
+7. Submit a pull request
 
 .. code:: bash
 
-  $ git checkout -b dev-docs     # (1)
+  $ git checkout -b dev/docs     # (1)
   $ emacs pdata/settings.py      # (2)
   $ git diff                     # (3)
   $ git add pdata/settings.py    # (4)
   $ git commit                   # (5)
-  $ git push origin dev-docs     # (6)
-  $ git checkout dev             # (7)
-  $ git merge dev-docs
-  $ git push
+  $ git push origin dev/docs     # (6), (7)
 
-:note: 
+:note:
   It is vital that you do **not** commit to :code:`master` directly.
   If you do, a push to :code:`master` will be rejected and you will need to
   reset your master branch to the prior commit.
@@ -148,4 +153,4 @@ improved, deployed, and scaled independently, which simplifies development.
 
 To that end, follow the `12-Factor App <https://12factor.net/>`_ guidelines.
 Putting in extra initial effort to organize and design the project well ensures
-that our future devlepment is smoother and hassle-free.
+that future development is smooth and hassle-free.
