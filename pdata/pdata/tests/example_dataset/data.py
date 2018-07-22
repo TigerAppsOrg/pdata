@@ -8,9 +8,9 @@ import typing
 
 from celery.schedules import crontab
 
-from pdata.data import Dataset
+from pdata.data import DataProvider
 
-class ExampleDataset(Dataset):
+class ExampleDataProvider(DataProvider):
   @property
   def tasks(self) -> typing.List[dict]:
     return [

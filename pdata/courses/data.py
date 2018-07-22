@@ -13,14 +13,14 @@ import datetime
 
 from django.db import transaction
 
-from pdata.data import Dataset
+from pdata.data import DataProvider
 from pdata.utils import bulk_upsert
 from courses import models
 
 BASE_URL = 'https://etcweb.princeton.edu/webfeeds/courseofferings/?term={term}&subject=all&fmt=json'
 LOGGER = logging.getLogger('pdata.courses')
 
-class CourseDataset(Dataset):
+class CourseDataProvider(DataProvider):
   '''
   Course dataset definition.
   '''

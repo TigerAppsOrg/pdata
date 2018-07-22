@@ -22,13 +22,11 @@ TESTING = (ENV == 'test' or
   (len(sys.argv) >= 2 and sys.argv[1] == 'test'))
 
 ### Application Definition
-INSTALLED_APPS = [
-  # Datasets
+INSTALLED_APPS = []
+
+PDATA_DATASETS = [
   'courses',
 ]
-
-# No datasets so far...
-PDATA_DATASETS = []
 INSTALLED_APPS.extend(PDATA_DATASETS)
 
 MIDDLEWARE = [
@@ -56,7 +54,9 @@ djcelery.setup_loader()
 CELERY_BROKER_URL = os.getenv('REDIS_URL', '')
 CELERY_RESULT_BACKEND = 'djcelery.backends.database:DatabaseBackend'
 CELERYBEAT_SCHEDULER = 'djcelery.schedulers.DatabaseScheduler'
-CELERYBEAT_SCHEDULE = utils.load_celery_tasks(PDATA_DATASETS)
+# TODO: needs to be lazily evaluated because utils requires the classes to be
+# imported
+# CELERYBEAT_SCHEDULE = utils.load_celery_tasks(PDATA_DATASETS)
 
 ### Test settings
 if TESTING:
