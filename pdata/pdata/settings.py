@@ -23,10 +23,6 @@ TESTING = (ENV == 'test' or
 
 ### Application Definition
 INSTALLED_APPS = [
-  'django.contrib.admin',
-  'django.contrib.auth',
-  'django.contrib.contenttypes',
-
   # Datasets
   'courses',
 ]
@@ -38,10 +34,6 @@ INSTALLED_APPS.extend(PDATA_DATASETS)
 MIDDLEWARE = [
   'django.middleware.security.SecurityMiddleware',
   'django.middleware.common.CommonMiddleware',
-  'django.middleware.csrf.CsrfViewMiddleware',
-  'django.contrib.sessions.middleware.SessionMiddleware',
-  'django.contrib.auth.middleware.AuthenticationMiddleware',
-  'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'pdata.urls'
@@ -52,22 +44,6 @@ import dj_database_url
 DATABASES = {
   'default': dj_database_url.config(default='sqlite:///db.sqlite3'),
 }
-
-### Password Validation
-AUTH_PASSWORD_VALIDATORS = [
-  {
-    'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-  },
-  {
-    'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-  },
-  {
-    'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-  },
-  {
-    'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-  },
-]
 
 ### Internationalization
 LANGUAGE_CODE = 'en-us'
