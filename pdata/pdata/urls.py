@@ -7,4 +7,5 @@
 from django.conf.urls import url, include
 
 urlpatterns = [
+  url(r'^courses/', include('courses.urls', namespace='courses')),
 ]
